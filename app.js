@@ -215,7 +215,8 @@ async function ensureBaseData() {
 
 async function submitPublicForm(event) {
   event.preventDefault();
-  const fd = new FormData(event.currentTarget);
+  const form = event.currentTarget;
+  const fd = new FormData(form);
   const assignedTo = clean(fd.get("assignedTo"), 80);
   if (!assignedTo) return toast("Selecciona a quién va dirigida la solicitud.", "error");
   const id = radicado();
@@ -272,7 +273,7 @@ async function submitPublicForm(event) {
       console.warn("La solicitud fue creada, pero no se pudo crear el registro público de consulta.", secondaryError);
     }
 
-    event.currentTarget.reset();
+    if (form && typeof form.reset === "function") form.reset();
     $("#radicadoBox").classList.remove("hidden");
     $("#radicadoBox").innerHTML = `<h3>Solicitud registrada</h3><p><strong>Radicado:</strong> ${esc(id)}</p><p><strong>Código de consulta:</strong> ${esc(consultaToken)}</p><p>Guarda ambos datos para consultar la respuesta.</p>`;
     toast("Solicitud registrada correctamente.");
@@ -283,7 +284,7 @@ async function submitPublicForm(event) {
     const box = $("#radicadoBox");
     if (box) {
       box.classList.remove("hidden");
-      box.innerHTML = `<h3>No fue posible registrar la solicitud</h3><p><strong>Error técnico:</strong> ${esc(detail || "Sin detalle reportado por Firebase")}</p><p>La app intentó crear únicamente el documento principal en solicitudes. Si este error continúa, revisa que Firestore esté creado y que las reglas estén publicadas en el proyecto rendi-cuentas.</p>`;
+      box.innerHTML = `<h3>No fue posible registrar la solicitud</h3><p><strong>Error técnico:</strong> ${esc(detail || "Sin detalle reportado por Firebase")}</p><p>Si este error continúa, revisa Firestore y reglas. Si el error menciona reset, actualiza app.js con la versión corregida.</p>`;
     }
   }
 }
@@ -325,10 +326,11 @@ function renderLiveAnswered() {
 
 async function login(event) {
   event.preventDefault();
-  const fd = new FormData(event.currentTarget);
+  const form = event.currentTarget;
+  const fd = new FormData(form);
   try {
     await signInWithEmailAndPassword(auth, fd.get("email"), fd.get("password"));
-    event.currentTarget.reset();
+    if (form && typeof form.reset === "function") form.reset();
     toast("Ingreso correcto.");
   } catch (error) {
     toast("Correo o contraseña incorrectos.", "error");
@@ -466,8 +468,9 @@ async function saveLive(event) {
 
 async function createInstitutionalUser(event) {
   event.preventDefault();
+  const form = event.currentTarget;
   if (state.profile?.role !== "super_admin") return;
-  const fd = new FormData(event.currentTarget);
+  const fd = new FormData(form);
   const nombre = clean(fd.get("nombre"), 90);
   const correo = clean(fd.get("correo"), 120).toLowerCase();
   const password = String(fd.get("password") || "");
@@ -482,7 +485,7 @@ async function createInstitutionalUser(event) {
     await setDoc(doc(db, "users", credential.user.uid), { nombre, correo, cargo, dependencia, role, responsibleId, activo: fd.get("activo") === "true", createdAt: serverTimestamp(), createdBy: state.profile.uid });
     await signOut(secondaryAuth).catch(() => {});
     await deleteApp(secondary).catch(() => {});
-    event.currentTarget.reset();
+    if (form && typeof form.reset === "function") form.reset();
     toast("Usuario creado correctamente.");
   } catch (error) {
     toast(error.code === "auth/email-already-in-use" ? "Ese correo ya existe en Firebase Auth." : "No fue posible crear el usuario.", "error");
