@@ -249,31 +249,42 @@ async function submitPublicForm(event) {
   };
   if (!data.nombreCiudadano || !data.barrioVereda || !data.mensaje) return toast("Completa los campos obligatorios.", "error");
   try {
-    const batch = writeBatch(db);
-    batch.set(doc(db, "solicitudes", id), data);
-    batch.set(doc(db, "publicResponses", lookupId), {
-      radicado: id,
-      consultaToken,
-      estado: "recibida",
-      tema: data.tema,
-      tipoSolicitud: data.tipoSolicitud,
-      pregunta: data.mensaje,
-      assignedTo,
-      responsable: `${data.responsableCargo} - ${data.responsableNombre}`,
-      respondidaEnVivo: false,
-      respuestaOficial: "",
-      evidenciaUrl: "",
-      minutoLive: "",
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp()
-    });
-    await batch.commit();
+    await setDoc(doc(db, "solicitudes", id), data);
+
+    try {
+      await setDoc(doc(db, "publicResponses", lookupId), {
+        radicado: id,
+        consultaToken,
+        estado: "recibida",
+        tema: data.tema,
+        tipoSolicitud: data.tipoSolicitud,
+        pregunta: data.mensaje,
+        assignedTo,
+        responsable: `${data.responsableCargo} - ${data.responsableNombre}`,
+        respondidaEnVivo: false,
+        respuestaOficial: "",
+        evidenciaUrl: "",
+        minutoLive: "",
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      });
+    } catch (secondaryError) {
+      console.warn("La solicitud fue creada, pero no se pudo crear el registro público de consulta.", secondaryError);
+    }
+
     event.currentTarget.reset();
     $("#radicadoBox").classList.remove("hidden");
     $("#radicadoBox").innerHTML = `<h3>Solicitud registrada</h3><p><strong>Radicado:</strong> ${esc(id)}</p><p><strong>Código de consulta:</strong> ${esc(consultaToken)}</p><p>Guarda ambos datos para consultar la respuesta.</p>`;
     toast("Solicitud registrada correctamente.");
   } catch (error) {
-    toast("No fue posible registrar la solicitud. Revisa las reglas de Firebase.", "error");
+    console.error("Error al registrar solicitud en Firebase", error);
+    const detail = [error?.code, error?.message].filter(Boolean).join(" — ");
+    toast(`No fue posible registrar la solicitud. ${detail || "Revisa la conexión con Firestore."}`, "error");
+    const box = $("#radicadoBox");
+    if (box) {
+      box.classList.remove("hidden");
+      box.innerHTML = `<h3>No fue posible registrar la solicitud</h3><p><strong>Error técnico:</strong> ${esc(detail || "Sin detalle reportado por Firebase")}</p><p>La app intentó crear únicamente el documento principal en solicitudes. Si este error continúa, revisa que Firestore esté creado y que las reglas estén publicadas en el proyecto rendi-cuentas.</p>`;
+    }
   }
 }
 
