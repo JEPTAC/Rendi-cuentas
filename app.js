@@ -93,30 +93,159 @@
     return `RC-2026-${String(max + 1).padStart(6, "0")}`;
   }
 
-  function embedFromUrl(raw) {
-    const url = String(raw || "").trim();
-    if (!url) return "";
+  function extractIframeSrc(raw) {
+    const text = String(raw || "").trim();
+    const match = text.match(/<iframe[^>]+src=["']([^"']+)["']/i);
+    return match ? match[1].replaceAll("&amp;", "&") : text;
+  }
+
+  function normalizeUrl(raw) {
+    let text = extractIframeSrc(raw).trim();
+    if (!text) return "";
+    if (/^\/\//.test(text)) text = `https:${text}`;
+    if (/^www\./i.test(text)) text = `https://${text}`;
+    return text;
+  }
+
+  function cleanVideoId(value) {
+    return String(value || "").replace(/[^a-zA-Z0-9_-]/g, "").trim();
+  }
+
+  function directVideoType(pathname) {
+    const path = String(pathname || "").toLowerCase();
+    if (/\.m3u8($|\?)/.test(path)) return "hls";
+    if (/\.(mp4|webm|ogv|ogg|mov)($|\?)/.test(path)) return "video";
+    return "";
+  }
+
+  function resolveVideoSource(raw) {
+    const original = String(raw || "").trim();
+    const url = normalizeUrl(original);
+    if (!url) {
+      return { kind: "empty", src: "", externalUrl: "", platform: "Sin transmisión", message: "Aún no se ha configurado un enlace de transmisión o video." };
+    }
+
     try {
       const parsed = new URL(url);
-      if (parsed.hostname.includes("youtu.be")) {
-        const id = parsed.pathname.replace("/", "");
-        return id ? `https://www.youtube.com/embed/${id}` : url;
+      if (!["http:", "https:"].includes(parsed.protocol)) {
+        return { kind: "external", src: "", externalUrl: url, platform: "Enlace no permitido", message: "Solo se permiten enlaces http o https." };
       }
-      if (parsed.hostname.includes("youtube.com")) {
-        const watchId = parsed.searchParams.get("v");
-        if (watchId) return `https://www.youtube.com/embed/${watchId}`;
-        const parts = parsed.pathname.split("/").filter(Boolean);
+
+      const host = parsed.hostname.replace(/^www\./, "").replace(/^m\./, "").replace(/^web\./, "").toLowerCase();
+      const path = parsed.pathname;
+      const parts = path.split("/").filter(Boolean);
+      const fileKind = directVideoType(path);
+
+      if (fileKind === "video") return { kind: "video", src: url, externalUrl: url, platform: "Archivo de video", message: "Reproducción directa desde archivo de video." };
+      if (fileKind === "hls") return { kind: "hls", src: url, externalUrl: url, platform: "Streaming HLS", message: "Reproducción de streaming HLS. En algunos navegadores se usa HLS.js." };
+
+      if (host === "youtu.be") {
+        const id = cleanVideoId(parts[0]);
+        if (id) return { kind: "iframe", src: `https://www.youtube.com/embed/${id}?rel=0`, externalUrl: url, platform: "YouTube", message: "Video de YouTube detectado." };
+      }
+
+      if (host.endsWith("youtube.com") || host.endsWith("youtube-nocookie.com")) {
+        const watchId = cleanVideoId(parsed.searchParams.get("v"));
+        const listId = parsed.searchParams.get("list");
+        if (watchId) return { kind: "iframe", src: `https://www.youtube.com/embed/${watchId}?rel=0`, externalUrl: url, platform: "YouTube", message: "Video o live de YouTube detectado." };
+        if (listId && (parts[0] === "playlist" || parsed.searchParams.has("list"))) return { kind: "iframe", src: `https://www.youtube.com/embed/videoseries?list=${encodeURIComponent(listId)}`, externalUrl: url, platform: "YouTube playlist", message: "Lista de reproducción de YouTube detectada." };
         const liveIndex = parts.indexOf("live");
-        if (liveIndex >= 0 && parts[liveIndex + 1]) return `https://www.youtube.com/embed/${parts[liveIndex + 1]}`;
-        if (parts[0] === "embed" && parts[1]) return url;
+        if (liveIndex >= 0 && parts[liveIndex + 1]) return { kind: "iframe", src: `https://www.youtube.com/embed/${cleanVideoId(parts[liveIndex + 1])}?rel=0`, externalUrl: url, platform: "YouTube Live", message: "Transmisión de YouTube detectada." };
+        if (parts[0] === "embed" && parts[1]) return { kind: "iframe", src: url, externalUrl: `https://www.youtube.com/watch?v=${cleanVideoId(parts[1])}`, platform: "YouTube", message: "Código embed de YouTube detectado." };
+        if (parts[0] === "shorts" && parts[1]) return { kind: "iframe", src: `https://www.youtube.com/embed/${cleanVideoId(parts[1])}?rel=0`, externalUrl: url, platform: "YouTube Shorts", message: "Short de YouTube detectado." };
       }
-      if (parsed.hostname.includes("facebook.com")) {
-        return `https://www.facebook.com/plugins/video.php?href=${encodeURIComponent(url)}&show_text=false&width=1280`;
+
+      if (host.endsWith("facebook.com") || host === "fb.watch") {
+        if (path.includes("/plugins/video.php") || path.includes("/plugins/post.php")) {
+          const href = parsed.searchParams.get("href") || url;
+          return { kind: "iframe", src: url, externalUrl: href, platform: "Facebook", message: "Código embed oficial de Facebook detectado." };
+        }
+        const plugin = `https://www.facebook.com/plugins/video.php?href=${encodeURIComponent(url)}&show_text=false&width=1280`;
+        return { kind: "iframe", src: plugin, externalUrl: url, platform: "Facebook", message: "Enlace de Facebook convertido al reproductor oficial. Si Facebook lo bloquea, usa el botón externo." };
       }
-      return url;
+
+      if (host.endsWith("vimeo.com")) {
+        const id = cleanVideoId(parts.find(part => /^\d+$/.test(part)) || "");
+        if (id) return { kind: "iframe", src: `https://player.vimeo.com/video/${id}`, externalUrl: url, platform: "Vimeo", message: "Video de Vimeo detectado." };
+      }
+
+      if (host.endsWith("dailymotion.com") || host === "dai.ly") {
+        let id = "";
+        if (host === "dai.ly") id = cleanVideoId(parts[0]);
+        else {
+          const videoIndex = parts.indexOf("video");
+          if (videoIndex >= 0 && parts[videoIndex + 1]) id = cleanVideoId(parts[videoIndex + 1].split("_")[0]);
+        }
+        if (id) return { kind: "iframe", src: `https://www.dailymotion.com/embed/video/${id}`, externalUrl: url, platform: "Dailymotion", message: "Video de Dailymotion detectado." };
+      }
+
+      if (host.endsWith("twitch.tv")) {
+        const parent = encodeURIComponent(location.hostname || "localhost");
+        if (parts[0] === "videos" && parts[1]) return { kind: "iframe", src: `https://player.twitch.tv/?video=${cleanVideoId(parts[1])}&parent=${parent}`, externalUrl: url, platform: "Twitch", message: "Video de Twitch detectado." };
+        if (parts[0]) return { kind: "iframe", src: `https://player.twitch.tv/?channel=${encodeURIComponent(parts[0])}&parent=${parent}`, externalUrl: url, platform: "Twitch", message: "Canal de Twitch detectado." };
+      }
+
+      if (host.endsWith("drive.google.com")) {
+        const fileIndex = parts.indexOf("d");
+        if (parts[0] === "file" && fileIndex >= 0 && parts[fileIndex + 1]) {
+          const id = encodeURIComponent(parts[fileIndex + 1]);
+          return { kind: "iframe", src: `https://drive.google.com/file/d/${id}/preview`, externalUrl: url, platform: "Google Drive", message: "Vista previa de video de Google Drive detectada." };
+        }
+      }
+
+      // Modo universal: intenta incrustar cualquier URL HTTPS como iframe. Si el sitio externo
+      // usa X-Frame-Options o Content-Security-Policy, el navegador lo bloqueará y quedará el botón externo.
+      return { kind: "iframe", src: url, externalUrl: url, platform: "Enlace universal", message: "Intento de reproducción universal. Si el origen bloquea iframe, abre el enlace externo." };
     } catch {
-      return url;
+      return { kind: "external", src: "", externalUrl: url, platform: "Enlace externo", message: "El texto ingresado no se pudo convertir a reproductor. Se mostrará como enlace externo." };
     }
+  }
+
+  function embedFromUrl(raw) {
+    const resolved = resolveVideoSource(raw);
+    return resolved.src || "";
+  }
+
+  function livePlatformName(url) {
+    return resolveVideoSource(url).platform || "plataforma de transmisión";
+  }
+
+  function renderVideoPlayer() {
+    const resolved = resolveVideoSource(state.liveUrl);
+    const fallback = resolved.externalUrl || normalizeUrl(state.liveUrl);
+    const title = escapeHtml(resolved.platform || "Transmisión");
+    let player = "";
+
+    if (resolved.kind === "iframe") {
+      player = `<iframe title="${title} - Rendición de Cuentas 2026" src="${escapeHtml(resolved.src)}" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen" allowfullscreen></iframe>`;
+    } else if (resolved.kind === "video") {
+      player = `<video class="native-video" controls playsinline preload="metadata" src="${escapeHtml(resolved.src)}"></video>`;
+    } else if (resolved.kind === "hls") {
+      player = `<video class="native-video hls-player" controls playsinline preload="metadata" data-hls="${escapeHtml(resolved.src)}"></video>`;
+    } else if (resolved.kind === "external") {
+      player = `<div class="video-placeholder"><strong>No se pudo crear reproductor interno</strong><span>${escapeHtml(resolved.message)}</span></div>`;
+    } else {
+      player = `<div class="video-placeholder"><strong>Reproductor del live</strong><span>Pega un enlace de YouTube, Facebook, video antiguo, live, MP4, HLS, Vimeo, Google Drive o código iframe.</span></div>`;
+    }
+
+    const help = state.liveUrl ? `<div class="live-help"><strong>${escapeHtml(resolved.platform)}:</strong> ${escapeHtml(resolved.message)} ${fallback ? `<a class="link light" href="${escapeHtml(fallback)}" target="_blank" rel="noopener noreferrer">Abrir enlace original</a>` : ""}</div>` : "";
+    return `<div class="video-frame">${player}</div>${help}`;
+  }
+
+  function initializeVideoPlayers() {
+    document.querySelectorAll("video.hls-player[data-hls]").forEach(video => {
+      const src = video.dataset.hls;
+      if (!src) return;
+      if (video.canPlayType("application/vnd.apple.mpegurl")) {
+        video.src = src;
+      } else if (window.Hls && window.Hls.isSupported()) {
+        const hls = new window.Hls();
+        hls.loadSource(src);
+        hls.attachMedia(video);
+      } else {
+        video.outerHTML = `<div class="video-placeholder"><strong>HLS no soportado</strong><span>Este navegador no puede reproducir este streaming directamente. Usa el botón de enlace externo.</span></div>`;
+      }
+    });
   }
 
   function statusBadgeClass(estado) {
@@ -176,7 +305,6 @@
   }
 
   function renderHero() {
-    const liveEmbedUrl = state.liveEmbedUrl || embedFromUrl(state.liveUrl);
     return `
       <section class="hero">
         <div>
@@ -196,9 +324,7 @@
         </div>
         <div class="live-card">
           <div class="live-status"><span class="pulse"></span> ${escapeHtml(state.eventoEstado)}</div>
-          <div class="video-frame">
-            ${liveEmbedUrl ? `<iframe title="Transmisión en vivo Rendición de Cuentas 2026" src="${escapeHtml(liveEmbedUrl)}" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe>` : `<div class="video-placeholder"><strong>Reproductor del live</strong><span>Desde el panel Super Admin se pega el enlace de YouTube Live, Facebook Live o StreamYard/OBS conectado a una plataforma de transmisión.</span></div>`}
-          </div>
+          ${renderVideoPlayer()}
         </div>
       </section>`;
   }
@@ -319,12 +445,13 @@
           </div>
         </div>
         <div class="card col-5">
-          <h2>Configurar transmisión</h2>
-          <p>Pega el enlace de YouTube Live, Facebook Live o StreamYard/OBS transmitido hacia una plataforma.</p>
+          <h2>Configurar transmisión universal</h2>
+          <p>Pega cualquier enlace de video, live o grabación. La app intentará convertirlo automáticamente a reproductor interno y siempre dejará el botón de respaldo para abrirlo afuera.</p>
+          <div class="notice small"><b>Soporta:</b> YouTube normal/live/shorts/listas, Facebook live/video/reel público o iframe, Vimeo, Dailymotion, Twitch, Google Drive, MP4/WebM/MOV y HLS .m3u8. Si la plataforma bloquea iframe por privacidad o permisos, ningún aplicativo puede forzarlo; en ese caso se muestra el botón externo.</div>
           <form id="liveForm">
-            <div class="field"><label>Enlace del live</label><input class="input" name="liveUrl" value="${escapeHtml(state.liveUrl)}" placeholder="https://www.youtube.com/watch?v=..." /></div>
-            <div class="field"><label>Estado del evento</label><select class="select" name="eventoEstado">${optionList(["Programado", "En vivo", "Cerrado"], state.eventoEstado)}</select></div>
-            <button class="btn" type="submit">Guardar live</button>
+            <div class="field"><label>Link del video, live, grabación o código iframe</label><textarea class="textarea compact-textarea" name="liveUrl" placeholder="https://www.youtube.com/watch?v=... | https://youtu.be/... | https://www.facebook.com/.../videos/... | https://fb.watch/... | https://servidor/video.mp4 | https://servidor/live.m3u8 | &lt;iframe src='...'&gt;">${escapeHtml(state.liveUrl)}</textarea></div>
+            <div class="field"><label>Estado del evento</label><select class="select" name="eventoEstado">${optionList(["Programado", "En vivo", "Grabación disponible", "Cerrado"], state.eventoEstado)}</select></div>
+            <button class="btn" type="submit">Guardar transmisión</button>
           </form>
         </div>
         <div class="card col-7">
@@ -458,6 +585,7 @@
 
     root.innerHTML = `<main class="app-shell">${renderHero()}${renderNav()}${section}</main>`;
     bindForms();
+    initializeVideoPlayers();
   }
 
   function bindForms() {
