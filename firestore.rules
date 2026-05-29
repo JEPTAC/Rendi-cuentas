@@ -1,0 +1,76 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function userProfile() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function isActive() {
+      return signedIn() && userProfile().activo == true;
+    }
+
+    function isSuperAdmin() {
+      return isActive() && userProfile().role == 'super_admin';
+    }
+
+    function isResponsibleFor(resourceData) {
+      return isActive() && resourceData.assignedTo == userProfile().responsibleId;
+    }
+
+    function responsibleAllowedUpdate() {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+        'estado',
+        'respuestaOficial',
+        'minutoLive',
+        'evidenciaUrl',
+        'respondidaEnVivo',
+        'answeredAt',
+        'updatedAt'
+      ]);
+    }
+
+    match /config/{docId} {
+      allow read: if true;
+      allow write: if isSuperAdmin();
+    }
+
+    match /responsables/{responsableId} {
+      allow read: if true;
+      allow write: if isSuperAdmin();
+    }
+
+    match /users/{userId} {
+      allow read: if isSuperAdmin() || (signedIn() && request.auth.uid == userId);
+      allow write: if isSuperAdmin();
+    }
+
+    match /solicitudes/{radicado} {
+      allow create: if false; // Las solicitudes públicas se crean solo por /api/submit-solicitud con Firebase Admin.
+      allow read: if isSuperAdmin() || isResponsibleFor(resource.data);
+      allow update: if isSuperAdmin() || (isResponsibleFor(resource.data) && responsibleAllowedUpdate());
+      allow delete: if false;
+    }
+
+    match /auditoria/{auditId} {
+      allow read: if isSuperAdmin();
+      allow create: if isActive();
+      allow update, delete: if false;
+    }
+
+    match /counters/{counterId} {
+      allow read, write: if false; // Solo API/server.
+    }
+
+    match /rateLimits/{limitId} {
+      allow read, write: if false; // Solo API/server.
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
