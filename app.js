@@ -1,5 +1,5 @@
 (() => {
-  const STORAGE_KEY = "rindecuentas-san-pedro-2026-github-pages-v1";
+  const STORAGE_KEY = "rindecuentas-san-pedro-2026-github-pages-v6-gestor-live";
   const root = document.getElementById("root");
 
   const initialUsers = [
@@ -29,9 +29,9 @@
 
   function defaultState() {
     return {
-      liveUrl: "",
-      liveEmbedUrl: "",
-      eventoEstado: "Programado",
+      liveUrl: `<iframe src="https://www.facebook.com/plugins/video.php?href=https%3A%2F%2Fwww.facebook.com%2FMunicipioSanPedroValle%2Fvideos%2F1558463162283224%2F&width=1280" width="1280" height="720" style="border:none;overflow:hidden" scrolling="no" frameborder="0" allowfullscreen="true" allow="autoplay; clipboard-write; encrypted-media; picture-in-picture; web-share" allowFullScreen="true"></iframe>`,
+      liveEmbedUrl: "https://www.facebook.com/plugins/video.php?href=https%3A%2F%2Fwww.facebook.com%2FMunicipioSanPedroValle%2Fvideos%2F1558463162283224%2F&width=1280",
+      eventoEstado: "En vivo",
       usuarios: initialUsers,
       solicitudes: [],
       auditoria: []
@@ -210,14 +210,23 @@
     return resolveVideoSource(url).platform || "plataforma de transmisión";
   }
 
+  function videoOrientation(raw, resolved) {
+    const text = String(raw || "").toLowerCase();
+    const src = String(resolved?.src || "").toLowerCase();
+    if (text.includes("/shorts/") || text.includes("/reel/") || text.includes("/reels/") || src.includes("/shorts/") || text.includes("tiktok.com")) return "vertical";
+    return "wide";
+  }
+
   function renderVideoPlayer() {
     const resolved = resolveVideoSource(state.liveUrl);
     const fallback = resolved.externalUrl || normalizeUrl(state.liveUrl);
     const title = escapeHtml(resolved.platform || "Transmisión");
+    const isPlayable = ["iframe", "video", "hls"].includes(resolved.kind);
+    const orientation = videoOrientation(state.liveUrl, resolved);
     let player = "";
 
     if (resolved.kind === "iframe") {
-      player = `<iframe title="${title} - Rendición de Cuentas 2026" src="${escapeHtml(resolved.src)}" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen" allowfullscreen></iframe>`;
+      player = `<iframe title="${title} - Rendición de Cuentas 2026" src="${escapeHtml(resolved.src)}" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen" loading="lazy" allowfullscreen></iframe>`;
     } else if (resolved.kind === "video") {
       player = `<video class="native-video" controls playsinline preload="metadata" src="${escapeHtml(resolved.src)}"></video>`;
     } else if (resolved.kind === "hls") {
@@ -228,11 +237,27 @@
       player = `<div class="video-placeholder"><strong>Reproductor del live</strong><span>Pega un enlace de YouTube, Facebook, video antiguo, live, MP4, HLS, Vimeo, Google Drive o código iframe.</span></div>`;
     }
 
+    const loader = isPlayable ? `<div class="video-loading"><span class="loader-orbit" aria-hidden="true"></span><strong>Preparando reproductor</strong><small>${title}</small></div>` : "";
     const help = state.liveUrl ? `<div class="live-help"><strong>${escapeHtml(resolved.platform)}:</strong> ${escapeHtml(resolved.message)} ${fallback ? `<a class="link light" href="${escapeHtml(fallback)}" target="_blank" rel="noopener noreferrer">Abrir enlace original</a>` : ""}</div>` : "";
-    return `<div class="video-frame">${player}</div>${help}`;
+    return `<div class="video-frame video-stage ${orientation === "vertical" ? "is-vertical" : "is-wide"} ${isPlayable ? "is-loading" : "is-loaded"}">${player}${loader}</div>${help}`;
   }
 
   function initializeVideoPlayers() {
+    document.querySelectorAll(".video-stage iframe").forEach(frame => {
+      const stage = frame.closest(".video-stage");
+      const markLoaded = () => stage && stage.classList.add("is-loaded");
+      frame.addEventListener("load", markLoaded, { once: true });
+      setTimeout(markLoaded, 1800);
+    });
+
+    document.querySelectorAll(".video-stage video").forEach(video => {
+      const stage = video.closest(".video-stage");
+      const markLoaded = () => stage && stage.classList.add("is-loaded");
+      video.addEventListener("loadedmetadata", markLoaded, { once: true });
+      video.addEventListener("canplay", markLoaded, { once: true });
+      setTimeout(markLoaded, 1800);
+    });
+
     document.querySelectorAll("video.hls-player[data-hls]").forEach(video => {
       const src = video.dataset.hls;
       if (!src) return;
@@ -444,15 +469,30 @@
             <div class="stat"><span>Cerradas</span><strong>${st.cerradas}</strong></div>
           </div>
         </div>
-        <div class="card col-5">
-          <h2>Configurar transmisión universal</h2>
-          <p>Pega cualquier enlace de video, live o grabación. La app intentará convertirlo automáticamente a reproductor interno y siempre dejará el botón de respaldo para abrirlo afuera.</p>
-          <div class="notice small"><b>Soporta:</b> YouTube normal/live/shorts/listas, Facebook live/video/reel público o iframe, Vimeo, Dailymotion, Twitch, Google Drive, MP4/WebM/MOV y HLS .m3u8. Si la plataforma bloquea iframe por privacidad o permisos, ningún aplicativo puede forzarlo; en ese caso se muestra el botón externo.</div>
+        <div class="card col-5 live-manager-card">
+          <div class="section-heading">
+            <div>
+              <span class="mini-label">Gestor rápido del live</span>
+              <h2>Actualizar solo el video</h2>
+            </div>
+            <span class="badge green">No toca preguntas</span>
+          </div>
+          <p>Pega aquí el código iframe que te entrega Facebook Live Producer, un enlace de YouTube, Facebook, video viejo, reel o archivo de video. Al guardar, la app reemplaza únicamente el reproductor del inicio.</p>
+          <div class="notice small"><b>Importante en GitHub Pages:</b> esta demo guarda el cambio en este navegador. Para que el cambio se vea automáticamente para todos los ciudadanos, el siguiente paso es conectar este mismo campo a Firebase/Firestore o Vercel backend. La interfaz ya queda preparada para ese flujo.</div>
           <form id="liveForm">
-            <div class="field"><label>Link del video, live, grabación o código iframe</label><textarea class="textarea compact-textarea" name="liveUrl" placeholder="https://www.youtube.com/watch?v=... | https://youtu.be/... | https://www.facebook.com/.../videos/... | https://fb.watch/... | https://servidor/video.mp4 | https://servidor/live.m3u8 | &lt;iframe src='...'&gt;">${escapeHtml(state.liveUrl)}</textarea></div>
-            <div class="field"><label>Estado del evento</label><select class="select" name="eventoEstado">${optionList(["Programado", "En vivo", "Grabación disponible", "Cerrado"], state.eventoEstado)}</select></div>
-            <button class="btn" type="submit">Guardar transmisión</button>
+            <div class="field"><label>Código iframe o enlace del nuevo live/video</label><textarea class="textarea compact-textarea live-code-box" name="liveUrl" placeholder="Pega aquí el iframe completo de Facebook o el enlace del video. Ejemplo: &lt;iframe src='https://www.facebook.com/plugins/video.php?href=...'&gt;&lt;/iframe&gt;">${escapeHtml(state.liveUrl)}</textarea></div>
+            <div class="form-row">
+              <div class="field"><label>Estado del evento</label><select class="select" name="eventoEstado">${optionList(["Programado", "En vivo", "Grabación disponible", "Cerrado"], state.eventoEstado)}</select></div>
+              <div class="field"><label>Plataforma detectada</label><input class="input" value="${escapeHtml(livePlatformName(state.liveUrl))}" readonly /></div>
+            </div>
+            <div class="action-bar">
+              <button class="btn" type="submit">Actualizar live/video</button>
+              <button class="btn secondary" type="button" data-action="clear-live">Quitar video</button>
+            </div>
           </form>
+          <div class="divider"></div>
+          <h3>Vista previa del reproductor</h3>
+          <div class="admin-video-preview">${renderVideoPlayer()}</div>
         </div>
         <div class="card col-7">
           <h2>Crear usuario responsable</h2>
@@ -752,6 +792,15 @@
     const action = button.dataset.action;
 
     if (action === "export-csv") return exportCsv();
+    if (action === "clear-live") {
+      state.liveUrl = "";
+      state.liveEmbedUrl = "";
+      state.eventoEstado = "Programado";
+      saveState();
+      render();
+      showToast("Reproductor del live retirado. Puedes pegar uno nuevo cuando lo tengas.");
+      return;
+    }
     if (action === "reset-demo") {
       if (confirm("Esto borrará las solicitudes de prueba guardadas en este navegador. ¿Continuar?")) {
         localStorage.removeItem(STORAGE_KEY);
