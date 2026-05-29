@@ -5,68 +5,120 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    function userProfile() {
+    function userDoc() {
       return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
     }
 
-    function isActive() {
-      return signedIn() && userProfile().activo == true;
+    function activeUser() {
+      return signedIn() && userDoc().activo == true;
     }
 
-    function isSuperAdmin() {
-      return isActive() && userProfile().role == 'super_admin';
+    function superAdmin() {
+      return activeUser() && userDoc().role == 'super_admin';
     }
 
-    function isResponsibleFor(resourceData) {
-      return isActive() && resourceData.assignedTo == userProfile().responsibleId;
+    function responsibleFor(assignedTo) {
+      return activeUser() && userDoc().responsibleId == assignedTo;
     }
 
-    function responsibleAllowedUpdate() {
+    function validText(value, min, max) {
+      return value is string && value.size() >= min && value.size() <= max;
+    }
+
+    function validOptionalText(value, max) {
+      return value is string && value.size() <= max;
+    }
+
+    function validSolicitudCreate() {
+      return request.resource.data.keys().hasOnly([
+        'radicado', 'consultaToken', 'anio', 'nombreCiudadano', 'correo', 'celular',
+        'barrioVereda', 'zona', 'tipoParticipante', 'tipoSolicitud', 'tema',
+        'assignedTo', 'responsableNombre', 'responsableCargo', 'dependencia',
+        'mensaje', 'estado', 'respondidaEnVivo', 'respuestaOficial', 'evidenciaUrl',
+        'minutoLive', 'createdAt', 'updatedAt'
+      ])
+      && validText(request.resource.data.radicado, 12, 30)
+      && validText(request.resource.data.consultaToken, 6, 20)
+      && request.resource.data.anio == 2026
+      && validText(request.resource.data.nombreCiudadano, 2, 90)
+      && validOptionalText(request.resource.data.correo, 120)
+      && validOptionalText(request.resource.data.celular, 20)
+      && validText(request.resource.data.barrioVereda, 2, 90)
+      && validText(request.resource.data.zona, 4, 20)
+      && validText(request.resource.data.tipoParticipante, 3, 60)
+      && validText(request.resource.data.tipoSolicitud, 3, 60)
+      && validText(request.resource.data.tema, 3, 90)
+      && validText(request.resource.data.assignedTo, 3, 90)
+      && validText(request.resource.data.mensaje, 5, 1800)
+      && request.resource.data.estado == 'recibida'
+      && request.resource.data.respondidaEnVivo == false
+      && request.resource.data.respuestaOficial == ''
+      && request.resource.data.evidenciaUrl == ''
+      && request.resource.data.minutoLive == '';
+    }
+
+    function validPublicResponseCreate() {
+      return request.resource.data.keys().hasOnly([
+        'radicado', 'consultaToken', 'estado', 'tema', 'tipoSolicitud', 'pregunta',
+        'assignedTo', 'responsable', 'respondidaEnVivo', 'respuestaOficial',
+        'evidenciaUrl', 'minutoLive', 'createdAt', 'updatedAt'
+      ])
+      && validText(request.resource.data.radicado, 12, 30)
+      && validText(request.resource.data.consultaToken, 6, 20)
+      && request.resource.data.estado == 'recibida'
+      && validText(request.resource.data.pregunta, 5, 1800)
+      && validText(request.resource.data.assignedTo, 3, 90)
+      && request.resource.data.respondidaEnVivo == false
+      && request.resource.data.respuestaOficial == '';
+    }
+
+    function responseUpdateKeys() {
       return request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-        'estado',
-        'respuestaOficial',
-        'minutoLive',
-        'evidenciaUrl',
-        'respondidaEnVivo',
-        'answeredAt',
-        'updatedAt'
+        'assignedTo', 'responsable', 'estado', 'respondidaEnVivo', 'minutoLive', 'evidenciaUrl',
+        'respuestaOficial', 'updatedAt', 'answeredAt'
+      ]);
+    }
+
+    function responsibleUpdateKeys() {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+        'estado', 'respondidaEnVivo', 'minutoLive', 'evidenciaUrl',
+        'respuestaOficial', 'updatedAt', 'answeredAt'
       ]);
     }
 
     match /config/{docId} {
       allow read: if true;
-      allow write: if isSuperAdmin();
+      allow write: if superAdmin();
     }
 
     match /responsables/{responsableId} {
       allow read: if true;
-      allow write: if isSuperAdmin();
+      allow write: if superAdmin();
     }
 
     match /users/{userId} {
-      allow read: if isSuperAdmin() || (signedIn() && request.auth.uid == userId);
-      allow write: if isSuperAdmin();
+      allow read: if superAdmin() || signedIn() && request.auth.uid == userId;
+      allow create, update, delete: if superAdmin();
     }
 
-    match /solicitudes/{radicado} {
-      allow create: if false; // Las solicitudes públicas se crean solo por /api/submit-solicitud con Firebase Admin.
-      allow read: if isSuperAdmin() || isResponsibleFor(resource.data);
-      allow update: if isSuperAdmin() || (isResponsibleFor(resource.data) && responsibleAllowedUpdate());
+    match /solicitudes/{solicitudId} {
+      allow create: if validSolicitudCreate();
+      allow read: if superAdmin() || responsibleFor(resource.data.assignedTo);
+      allow update: if superAdmin() && responseUpdateKeys() || responsibleFor(resource.data.assignedTo) && responsibleUpdateKeys();
+      allow delete: if false;
+    }
+
+    match /publicResponses/{responseId} {
+      allow read: if true;
+      allow create: if validPublicResponseCreate();
+      allow update: if superAdmin() || responsibleFor(resource.data.assignedTo) && responsibleUpdateKeys();
       allow delete: if false;
     }
 
     match /auditoria/{auditId} {
-      allow read: if isSuperAdmin();
-      allow create: if isActive();
+      allow read: if superAdmin();
+      allow create: if activeUser();
       allow update, delete: if false;
-    }
-
-    match /counters/{counterId} {
-      allow read, write: if false; // Solo API/server.
-    }
-
-    match /rateLimits/{limitId} {
-      allow read, write: if false; // Solo API/server.
     }
 
     match /{document=**} {

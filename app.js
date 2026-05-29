@@ -1,854 +1,517 @@
-(() => {
-  const STORAGE_KEY = "rindecuentas-san-pedro-2026-github-pages-v6-gestor-live";
-  const root = document.getElementById("root");
+import { initializeApp, deleteApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
+import { getAnalytics, isSupported } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-analytics.js";
+import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut, createUserWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
+import { getFirestore, collection, doc, getDoc, getDocs, setDoc, updateDoc, addDoc, query, where, serverTimestamp, writeBatch } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
 
-  const initialUsers = [
-    { id: "juan-esteban-perez", nombre: "Juan Esteban Pérez", cargo: "CIO TICs", dependencia: "Tecnologías de la Información y las Comunicaciones", rol: "super_admin", correo: "", celular: "", activo: true, asignable: true },
-    { id: "felipe-garcia", nombre: "Felipe García", cargo: "Secretario de Hacienda", dependencia: "Secretaría de Hacienda", rol: "responsable", correo: "", celular: "", activo: true, asignable: true },
-    { id: "yeini-coromoto", nombre: "Yeini Coromoto", cargo: "Secretaria de Salud", dependencia: "Secretaría de Salud", rol: "responsable", correo: "", celular: "", activo: true, asignable: true },
-    { id: "laura-cristina-gonzales", nombre: "Laura Cristina Gonzales", cargo: "Secretaria de Gobierno", dependencia: "Secretaría de Gobierno", rol: "responsable", correo: "", celular: "", activo: true, asignable: true },
-    { id: "einar-gonzales", nombre: "Einar Gonzales", cargo: "Secretario de Desarrollo", dependencia: "Secretaría de Desarrollo", rol: "responsable", correo: "", celular: "", activo: true, asignable: true },
-    { id: "diego-efrain", nombre: "Diego Efraín", cargo: "Secretario de Agricultura", dependencia: "Secretaría de Agricultura", rol: "responsable", correo: "", celular: "", activo: true, asignable: true },
-    { id: "valentina-erazo", nombre: "Valentina Erazo", cargo: "Técnica Administrativa de Educación, Cultura y Deporte", dependencia: "Educación, Cultura y Deporte", rol: "responsable", correo: "", celular: "", activo: true, asignable: true },
-    { id: "valeria-giraldo", nombre: "Valeria Giraldo", cargo: "Técnica Administrativa de Bienestar Social", dependencia: "Bienestar Social", rol: "responsable", correo: "", celular: "", activo: true, asignable: true },
-    { id: "yasmin-tascon", nombre: "Yasmin Tascon", cargo: "Gestora Social", dependencia: "Gestión Social", rol: "responsable", correo: "", celular: "", activo: true, asignable: true },
-    { id: "diego-fernando-mendoza", nombre: "Diego Fernando Mendoza", cargo: "Alcalde Municipal", dependencia: "Despacho del Alcalde", rol: "responsable_alcalde", correo: "", celular: "", activo: true, asignable: true }
-  ];
+const firebaseConfig = {
+  apiKey: "AIzaSyBW-HYPyV4LfMEgV1Yor98dehewQIYWalU",
+  authDomain: "rendi-cuentas.firebaseapp.com",
+  projectId: "rendi-cuentas",
+  storageBucket: "rendi-cuentas.firebasestorage.app",
+  messagingSenderId: "234640973194",
+  appId: "1:234640973194:web:4a89139ac58aceccae7c73",
+  measurementId: "G-DDNDYMPKTF"
+};
 
-  const temas = ["Alcaldía / Gestión general", "Hacienda", "Salud", "Gobierno", "Desarrollo", "Agricultura", "Educación", "Cultura", "Deporte", "Bienestar Social", "Gestión Social", "TICs / Transformación digital", "Obras públicas", "Seguridad", "Ambiente", "Otro"];
-  const tiposSolicitud = ["Pregunta", "Duda", "Inquietud", "Petición", "Propuesta", "Comentario", "Solicitud de información"];
-  const tiposParticipante = ["Ciudadano", "Líder comunitario", "Veeduría", "Comerciante", "Joven", "Adulto mayor", "Servidor público", "Representante de organización", "Otro"];
-  const estados = ["Recibida", "En revisión", "Asignada", "Reasignada", "Priorizada para live", "Respondida en vivo", "Pendiente de respuesta escrita", "En elaboración de respuesta", "Respondida", "Notificada", "Cerrada", "Escalada"];
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+isSupported().then(ok => ok && getAnalytics(app)).catch(() => {});
 
-  let activeTab = "publico";
-  let consultaRadicado = "";
-  let selectedResponsable = "felipe-garcia";
-  let filters = { estado: "Todos", responsableId: "Todos", texto: "" };
-  let toastTimer;
-  let state = loadState();
+const responsablesBase = [
+  { id: "cio-tics", nombre: "Juan Esteban Pérez", cargo: "CIO TICs", dependencia: "Tecnologías de la Información y las Comunicaciones", orden: 1, activo: true },
+  { id: "hacienda", nombre: "Felipe García", cargo: "Secretario de Hacienda", dependencia: "Secretaría de Hacienda", orden: 2, activo: true },
+  { id: "salud", nombre: "Yeini Coromoto", cargo: "Secretaria de Salud", dependencia: "Secretaría de Salud", orden: 3, activo: true },
+  { id: "gobierno", nombre: "Laura Cristina Gonzales", cargo: "Secretaria de Gobierno", dependencia: "Secretaría de Gobierno", orden: 4, activo: true },
+  { id: "desarrollo", nombre: "Einar Gonzales", cargo: "Secretario de Desarrollo", dependencia: "Secretaría de Desarrollo", orden: 5, activo: true },
+  { id: "agricultura", nombre: "Diego Efraín", cargo: "Secretario de Agricultura", dependencia: "Secretaría de Agricultura", orden: 6, activo: true },
+  { id: "educacion-cultura-deporte", nombre: "Valentina Erazo", cargo: "Técnica Administrativa de Educación, Cultura y Deporte", dependencia: "Educación, Cultura y Deporte", orden: 7, activo: true },
+  { id: "bienestar-social", nombre: "Valeria Giraldo", cargo: "Técnica Administrativa de Bienestar Social", dependencia: "Bienestar Social", orden: 8, activo: true },
+  { id: "gestion-social", nombre: "Yasmin Tascon", cargo: "Gestora Social", dependencia: "Gestión Social", orden: 9, activo: true },
+  { id: "alcalde", nombre: "Diego Fernando Mendoza", cargo: "Alcalde Municipal", dependencia: "Despacho del Alcalde", orden: 10, activo: true }
+];
 
-  function defaultState() {
-    return {
-      liveUrl: `<iframe src="https://www.facebook.com/plugins/video.php?href=https%3A%2F%2Fwww.facebook.com%2FMunicipioSanPedroValle%2Fvideos%2F1558463162283224%2F&width=1280" width="1280" height="720" style="border:none;overflow:hidden" scrolling="no" frameborder="0" allowfullscreen="true" allow="autoplay; clipboard-write; encrypted-media; picture-in-picture; web-share" allowFullScreen="true"></iframe>`,
-      liveEmbedUrl: "https://www.facebook.com/plugins/video.php?href=https%3A%2F%2Fwww.facebook.com%2FMunicipioSanPedroValle%2Fvideos%2F1558463162283224%2F&width=1280",
-      eventoEstado: "En vivo",
-      usuarios: initialUsers,
-      solicitudes: [],
-      auditoria: []
-    };
-  }
+const cargos = [...new Set(responsablesBase.map(r => r.cargo))];
+const dependencias = [...new Set(responsablesBase.map(r => r.dependencia))];
+const state = { view: "inicio", user: null, profile: null, responsables: responsablesBase, liveConfig: null, solicitudes: [], publicResponses: [], selectedRequest: null };
+const $ = selector => document.querySelector(selector);
+const $$ = selector => Array.from(document.querySelectorAll(selector));
 
-  function loadState() {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (!raw) return defaultState();
-      const parsed = JSON.parse(raw);
-      return { ...defaultState(), ...parsed, usuarios: Array.isArray(parsed.usuarios) && parsed.usuarios.length ? parsed.usuarios : initialUsers };
-    } catch (error) {
-      console.warn("No se pudo leer la información local", error);
-      return defaultState();
+function toast(message, type = "ok") {
+  const el = $("#toast");
+  el.textContent = message;
+  el.className = `toast show ${type === "error" ? "error" : ""}`;
+  clearTimeout(toast.timer);
+  toast.timer = setTimeout(() => el.className = "toast", 3600);
+}
+
+function esc(value) {
+  return String(value ?? "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#039;");
+}
+
+function clean(value, max = 2000) {
+  return String(value ?? "").trim().replace(/[<>]/g, "").slice(0, max);
+}
+
+function slug(value) {
+  return String(value || "item").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") || `item-${Date.now()}`;
+}
+
+function formatDate(value) {
+  if (!value) return "-";
+  const date = value?.toDate ? value.toDate() : new Date(value);
+  if (Number.isNaN(date.getTime())) return "-";
+  return new Intl.DateTimeFormat("es-CO", { dateStyle: "medium", timeStyle: "short" }).format(date);
+}
+
+function changeView(view) {
+  state.view = view;
+  $$(".view").forEach(el => el.classList.toggle("active", el.id === view));
+  $$(`[data-go]`).forEach(btn => btn.classList.toggle("active", btn.dataset.go === view));
+  $("#mainNav")?.classList.remove("open");
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+function token() {
+  const array = new Uint32Array(2);
+  crypto.getRandomValues(array);
+  return Array.from(array).map(n => n.toString(36)).join("").slice(0, 10).toUpperCase();
+}
+
+function radicado() {
+  const now = new Date();
+  const day = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}`;
+  return `RC-2026-${day}-${token().slice(0, 4)}`;
+}
+
+function extractIframeSrc(raw) {
+  const text = String(raw || "").trim();
+  const match = text.match(/<iframe[^>]+src=["']([^"']+)["']/i);
+  return match ? match[1].replaceAll("&amp;", "&") : text;
+}
+
+function normalizeUrl(raw) {
+  let text = extractIframeSrc(raw).trim();
+  if (!text) return "";
+  if (/^\/\//.test(text)) text = `https:${text}`;
+  if (/^www\./i.test(text)) text = `https://${text}`;
+  return text;
+}
+
+function videoType(pathname) {
+  const path = String(pathname || "").toLowerCase();
+  if (/\.m3u8($|\?)/.test(path)) return "hls";
+  if (/\.(mp4|webm|ogv|ogg|mov)($|\?)/.test(path)) return "video";
+  return "";
+}
+
+function videoSource(raw) {
+  const original = String(raw || "").trim();
+  const url = normalizeUrl(original);
+  if (!url) return { kind: "empty", src: "", external: "", platform: "Transmisión", message: "Aún no se ha configurado el reproductor." };
+  try {
+    const parsed = new URL(url);
+    const host = parsed.hostname.replace(/^www\./, "").replace(/^m\./, "").toLowerCase();
+    const parts = parsed.pathname.split("/").filter(Boolean);
+    const direct = videoType(parsed.pathname);
+    if (direct === "video") return { kind: "video", src: url, external: url, platform: "Video", message: "Archivo de video detectado." };
+    if (direct === "hls") return { kind: "video", src: url, external: url, platform: "Streaming", message: "Streaming HLS detectado." };
+    if (host === "youtu.be" && parts[0]) return { kind: "iframe", src: `https://www.youtube.com/embed/${encodeURIComponent(parts[0])}?rel=0`, external: url, platform: "YouTube", message: "Video o live de YouTube detectado." };
+    if (host.endsWith("youtube.com") || host.endsWith("youtube-nocookie.com")) {
+      const id = parsed.searchParams.get("v");
+      if (id) return { kind: "iframe", src: `https://www.youtube.com/embed/${encodeURIComponent(id)}?rel=0`, external: url, platform: "YouTube", message: "Video o live de YouTube detectado." };
+      if (parts[0] === "embed" && parts[1]) return { kind: "iframe", src: url, external: url, platform: "YouTube", message: "Código embed de YouTube detectado." };
+      if (parts[0] === "shorts" && parts[1]) return { kind: "iframe", src: `https://www.youtube.com/embed/${encodeURIComponent(parts[1])}?rel=0`, external: url, platform: "YouTube Shorts", message: "Short de YouTube detectado." };
+      const liveIndex = parts.indexOf("live");
+      if (liveIndex >= 0 && parts[liveIndex + 1]) return { kind: "iframe", src: `https://www.youtube.com/embed/${encodeURIComponent(parts[liveIndex + 1])}?rel=0`, external: url, platform: "YouTube Live", message: "Transmisión de YouTube detectada." };
     }
-  }
-
-  function saveState() {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-  }
-
-  function escapeHtml(value) {
-    return String(value ?? "")
-      .replaceAll("&", "&amp;")
-      .replaceAll("<", "&lt;")
-      .replaceAll(">", "&gt;")
-      .replaceAll('"', "&quot;")
-      .replaceAll("'", "&#039;");
-  }
-
-  function nowIso() {
-    return new Date().toISOString();
-  }
-
-  function formatDate(value) {
-    if (!value) return "-";
-    try {
-      return new Intl.DateTimeFormat("es-CO", { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }).format(new Date(value));
-    } catch {
-      return value;
+    if (host.endsWith("facebook.com") || host === "fb.watch") {
+      if (parsed.pathname.includes("/plugins/video.php")) {
+        return { kind: "iframe", src: url, external: parsed.searchParams.get("href") || url, platform: "Facebook", message: "Código embed oficial de Facebook detectado." };
+      }
+      return { kind: "iframe", src: `https://www.facebook.com/plugins/video.php?href=${encodeURIComponent(url)}&show_text=false&width=1280`, external: url, platform: "Facebook", message: "Enlace de Facebook convertido al reproductor oficial." };
     }
-  }
-
-  function slug(value) {
-    return String(value || "usuario")
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "")
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/(^-|-$)/g, "") || `usuario-${Date.now()}`;
-  }
-
-  function nextRadicado() {
-    const max = state.solicitudes.reduce((acc, item) => {
-      const number = Number(String(item.radicado || "").split("-").pop() || "0");
-      return Number.isFinite(number) ? Math.max(acc, number) : acc;
-    }, 0);
-    return `RC-2026-${String(max + 1).padStart(6, "0")}`;
-  }
-
-  function extractIframeSrc(raw) {
-    const text = String(raw || "").trim();
-    const match = text.match(/<iframe[^>]+src=["']([^"']+)["']/i);
-    return match ? match[1].replaceAll("&amp;", "&") : text;
-  }
-
-  function normalizeUrl(raw) {
-    let text = extractIframeSrc(raw).trim();
-    if (!text) return "";
-    if (/^\/\//.test(text)) text = `https:${text}`;
-    if (/^www\./i.test(text)) text = `https://${text}`;
-    return text;
-  }
-
-  function cleanVideoId(value) {
-    return String(value || "").replace(/[^a-zA-Z0-9_-]/g, "").trim();
-  }
-
-  function directVideoType(pathname) {
-    const path = String(pathname || "").toLowerCase();
-    if (/\.m3u8($|\?)/.test(path)) return "hls";
-    if (/\.(mp4|webm|ogv|ogg|mov)($|\?)/.test(path)) return "video";
-    return "";
-  }
-
-  function resolveVideoSource(raw) {
-    const original = String(raw || "").trim();
-    const url = normalizeUrl(original);
-    if (!url) {
-      return { kind: "empty", src: "", externalUrl: "", platform: "Sin transmisión", message: "Aún no se ha configurado un enlace de transmisión o video." };
+    if (host.endsWith("vimeo.com")) {
+      const id = parts.find(part => /^\d+$/.test(part));
+      if (id) return { kind: "iframe", src: `https://player.vimeo.com/video/${id}`, external: url, platform: "Vimeo", message: "Video de Vimeo detectado." };
     }
-
-    try {
-      const parsed = new URL(url);
-      if (!["http:", "https:"].includes(parsed.protocol)) {
-        return { kind: "external", src: "", externalUrl: url, platform: "Enlace no permitido", message: "Solo se permiten enlaces http o https." };
-      }
-
-      const host = parsed.hostname.replace(/^www\./, "").replace(/^m\./, "").replace(/^web\./, "").toLowerCase();
-      const path = parsed.pathname;
-      const parts = path.split("/").filter(Boolean);
-      const fileKind = directVideoType(path);
-
-      if (fileKind === "video") return { kind: "video", src: url, externalUrl: url, platform: "Archivo de video", message: "Reproducción directa desde archivo de video." };
-      if (fileKind === "hls") return { kind: "hls", src: url, externalUrl: url, platform: "Streaming HLS", message: "Reproducción de streaming HLS. En algunos navegadores se usa HLS.js." };
-
-      if (host === "youtu.be") {
-        const id = cleanVideoId(parts[0]);
-        if (id) return { kind: "iframe", src: `https://www.youtube.com/embed/${id}?rel=0`, externalUrl: url, platform: "YouTube", message: "Video de YouTube detectado." };
-      }
-
-      if (host.endsWith("youtube.com") || host.endsWith("youtube-nocookie.com")) {
-        const watchId = cleanVideoId(parsed.searchParams.get("v"));
-        const listId = parsed.searchParams.get("list");
-        if (watchId) return { kind: "iframe", src: `https://www.youtube.com/embed/${watchId}?rel=0`, externalUrl: url, platform: "YouTube", message: "Video o live de YouTube detectado." };
-        if (listId && (parts[0] === "playlist" || parsed.searchParams.has("list"))) return { kind: "iframe", src: `https://www.youtube.com/embed/videoseries?list=${encodeURIComponent(listId)}`, externalUrl: url, platform: "YouTube playlist", message: "Lista de reproducción de YouTube detectada." };
-        const liveIndex = parts.indexOf("live");
-        if (liveIndex >= 0 && parts[liveIndex + 1]) return { kind: "iframe", src: `https://www.youtube.com/embed/${cleanVideoId(parts[liveIndex + 1])}?rel=0`, externalUrl: url, platform: "YouTube Live", message: "Transmisión de YouTube detectada." };
-        if (parts[0] === "embed" && parts[1]) return { kind: "iframe", src: url, externalUrl: `https://www.youtube.com/watch?v=${cleanVideoId(parts[1])}`, platform: "YouTube", message: "Código embed de YouTube detectado." };
-        if (parts[0] === "shorts" && parts[1]) return { kind: "iframe", src: `https://www.youtube.com/embed/${cleanVideoId(parts[1])}?rel=0`, externalUrl: url, platform: "YouTube Shorts", message: "Short de YouTube detectado." };
-      }
-
-      if (host.endsWith("facebook.com") || host === "fb.watch") {
-        if (path.includes("/plugins/video.php") || path.includes("/plugins/post.php")) {
-          const href = parsed.searchParams.get("href") || url;
-          return { kind: "iframe", src: url, externalUrl: href, platform: "Facebook", message: "Código embed oficial de Facebook detectado." };
-        }
-        const plugin = `https://www.facebook.com/plugins/video.php?href=${encodeURIComponent(url)}&show_text=false&width=1280`;
-        return { kind: "iframe", src: plugin, externalUrl: url, platform: "Facebook", message: "Enlace de Facebook convertido al reproductor oficial. Si Facebook lo bloquea, usa el botón externo." };
-      }
-
-      if (host.endsWith("vimeo.com")) {
-        const id = cleanVideoId(parts.find(part => /^\d+$/.test(part)) || "");
-        if (id) return { kind: "iframe", src: `https://player.vimeo.com/video/${id}`, externalUrl: url, platform: "Vimeo", message: "Video de Vimeo detectado." };
-      }
-
-      if (host.endsWith("dailymotion.com") || host === "dai.ly") {
-        let id = "";
-        if (host === "dai.ly") id = cleanVideoId(parts[0]);
-        else {
-          const videoIndex = parts.indexOf("video");
-          if (videoIndex >= 0 && parts[videoIndex + 1]) id = cleanVideoId(parts[videoIndex + 1].split("_")[0]);
-        }
-        if (id) return { kind: "iframe", src: `https://www.dailymotion.com/embed/video/${id}`, externalUrl: url, platform: "Dailymotion", message: "Video de Dailymotion detectado." };
-      }
-
-      if (host.endsWith("twitch.tv")) {
-        const parent = encodeURIComponent(location.hostname || "localhost");
-        if (parts[0] === "videos" && parts[1]) return { kind: "iframe", src: `https://player.twitch.tv/?video=${cleanVideoId(parts[1])}&parent=${parent}`, externalUrl: url, platform: "Twitch", message: "Video de Twitch detectado." };
-        if (parts[0]) return { kind: "iframe", src: `https://player.twitch.tv/?channel=${encodeURIComponent(parts[0])}&parent=${parent}`, externalUrl: url, platform: "Twitch", message: "Canal de Twitch detectado." };
-      }
-
-      if (host.endsWith("drive.google.com")) {
-        const fileIndex = parts.indexOf("d");
-        if (parts[0] === "file" && fileIndex >= 0 && parts[fileIndex + 1]) {
-          const id = encodeURIComponent(parts[fileIndex + 1]);
-          return { kind: "iframe", src: `https://drive.google.com/file/d/${id}/preview`, externalUrl: url, platform: "Google Drive", message: "Vista previa de video de Google Drive detectada." };
-        }
-      }
-
-      // Modo universal: intenta incrustar cualquier URL HTTPS como iframe. Si el sitio externo
-      // usa X-Frame-Options o Content-Security-Policy, el navegador lo bloqueará y quedará el botón externo.
-      return { kind: "iframe", src: url, externalUrl: url, platform: "Enlace universal", message: "Intento de reproducción universal. Si el origen bloquea iframe, abre el enlace externo." };
-    } catch {
-      return { kind: "external", src: "", externalUrl: url, platform: "Enlace externo", message: "El texto ingresado no se pudo convertir a reproductor. Se mostrará como enlace externo." };
-    }
+    return { kind: "iframe", src: url, external: url, platform: "Enlace", message: "Se intentará reproducir el enlace dentro del sitio." };
+  } catch {
+    return { kind: "empty", src: "", external: "", platform: "Transmisión", message: "El enlace no es válido." };
   }
+}
 
-  function embedFromUrl(raw) {
-    const resolved = resolveVideoSource(raw);
-    return resolved.src || "";
+function renderVideo() {
+  const config = state.liveConfig || {};
+  const embed = config.embed || "";
+  const src = videoSource(embed);
+  const text = String(embed).toLowerCase();
+  const vertical = text.includes("/reel") || text.includes("/shorts");
+  $("#liveTitle").textContent = config.title || "Live institucional";
+  $("#openLive").href = src.external || "#";
+  $("#openLive").style.display = src.external ? "inline-flex" : "none";
+  let player = `<div class="video-stage ${vertical ? "is-vertical" : "is-wide"}"><div class="video-loading"><span class="loader-orbit"></span><strong>Preparando reproductor</strong><small>${esc(src.platform)}</small></div>`;
+  if (src.kind === "iframe") player += `<iframe title="${esc(src.platform)}" src="${esc(src.src)}" allow="autoplay; clipboard-write; encrypted-media; picture-in-picture; web-share; fullscreen" allowfullscreen loading="lazy"></iframe>`;
+  else if (src.kind === "video") player += `<video controls playsinline preload="metadata" src="${esc(src.src)}"></video>`;
+  else player += `<div class="video-loading"><strong>Transmisión pendiente</strong><small>${esc(src.message)}</small></div>`;
+  player += `</div><div class="video-note"><strong>${esc(src.platform)}:</strong> ${esc(src.message)}${src.external ? ` <a class="text-link" href="${esc(src.external)}" target="_blank" rel="noopener noreferrer">Abrir enlace original</a>` : ""}</div>`;
+  $("#videoMount").innerHTML = player;
+  $$(".video-stage iframe, .video-stage video").forEach(el => {
+    const stage = el.closest(".video-stage");
+    const loaded = () => stage?.classList.add("is-loaded");
+    el.addEventListener("load", loaded, { once: true });
+    el.addEventListener("loadedmetadata", loaded, { once: true });
+    setTimeout(loaded, 1600);
+  });
+}
+
+function responsableName(id) {
+  const r = state.responsables.find(x => x.id === id);
+  return r ? `${r.cargo} - ${r.nombre}` : id;
+}
+
+function fillSelects() {
+  const options = state.responsables.filter(r => r.activo !== false).sort((a,b) => (a.orden || 99) - (b.orden || 99)).map(r => `<option value="${esc(r.id)}">${esc(r.cargo)} - ${esc(r.nombre)}</option>`).join("");
+  ["#publicAssignedTo", "#dialogAssignedTo"].forEach(id => { const el = $(id); if (el) el.innerHTML = `<option value="">Seleccionar</option>${options}`; });
+  const cargoSelect = $("#cargoSelect");
+  const depSelect = $("#dependenciaSelect");
+  if (cargoSelect) cargoSelect.innerHTML = `<option value="">Seleccionar</option>${cargos.map(c => `<option>${esc(c)}</option>`).join("")}`;
+  if (depSelect) depSelect.innerHTML = `<option value="">Seleccionar</option>${dependencias.map(d => `<option>${esc(d)}</option>`).join("")}`;
+}
+
+function profileFromCargo(cargo, dependencia) {
+  const found = responsablesBase.find(r => r.cargo === cargo && r.dependencia === dependencia) || responsablesBase.find(r => r.cargo === cargo) || responsablesBase.find(r => r.dependencia === dependencia);
+  return found ? found.id : slug(`${cargo}-${dependencia}`);
+}
+
+async function loadPublicData() {
+  try {
+    const [resSnap, configSnap, publicSnap] = await Promise.all([
+      getDocs(collection(db, "responsables")),
+      getDoc(doc(db, "config", "rendicion-2026")),
+      getDocs(query(collection(db, "publicResponses"), where("respondidaEnVivo", "==", true)))
+    ]);
+    if (!resSnap.empty) state.responsables = resSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+    state.liveConfig = configSnap.exists() ? configSnap.data() : { title: "Live institucional", embed: "" };
+    state.publicResponses = publicSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+    fillSelects();
+    renderVideo();
+    renderLiveAnswered();
+  } catch (error) {
+    fillSelects();
+    renderVideo();
+    toast("No se pudo cargar la información pública. Revisa reglas y conexión.", "error");
   }
+}
 
-  function livePlatformName(url) {
-    return resolveVideoSource(url).platform || "plataforma de transmisión";
-  }
+async function ensureBaseData() {
+  if (state.profile?.role !== "super_admin") return;
+  const batch = writeBatch(db);
+  responsablesBase.forEach(r => batch.set(doc(db, "responsables", r.id), r, { merge: true }));
+  batch.set(doc(db, "config", "rendicion-2026"), { title: "Live institucional", embed: state.liveConfig?.embed || "", updatedAt: serverTimestamp() }, { merge: true });
+  await batch.commit();
+  await loadPublicData();
+}
 
-  function videoOrientation(raw, resolved) {
-    const text = String(raw || "").toLowerCase();
-    const src = String(resolved?.src || "").toLowerCase();
-    if (text.includes("/shorts/") || text.includes("/reel/") || text.includes("/reels/") || src.includes("/shorts/") || text.includes("tiktok.com")) return "vertical";
-    return "wide";
-  }
-
-  function renderVideoPlayer() {
-    const resolved = resolveVideoSource(state.liveUrl);
-    const fallback = resolved.externalUrl || normalizeUrl(state.liveUrl);
-    const title = escapeHtml(resolved.platform || "Transmisión");
-    const isPlayable = ["iframe", "video", "hls"].includes(resolved.kind);
-    const orientation = videoOrientation(state.liveUrl, resolved);
-    let player = "";
-
-    if (resolved.kind === "iframe") {
-      player = `<iframe title="${title} - Rendición de Cuentas 2026" src="${escapeHtml(resolved.src)}" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen" loading="lazy" allowfullscreen></iframe>`;
-    } else if (resolved.kind === "video") {
-      player = `<video class="native-video" controls playsinline preload="metadata" src="${escapeHtml(resolved.src)}"></video>`;
-    } else if (resolved.kind === "hls") {
-      player = `<video class="native-video hls-player" controls playsinline preload="metadata" data-hls="${escapeHtml(resolved.src)}"></video>`;
-    } else if (resolved.kind === "external") {
-      player = `<div class="video-placeholder"><strong>No se pudo crear reproductor interno</strong><span>${escapeHtml(resolved.message)}</span></div>`;
-    } else {
-      player = `<div class="video-placeholder"><strong>Reproductor del live</strong><span>Pega un enlace de YouTube, Facebook, video antiguo, live, MP4, HLS, Vimeo, Google Drive o código iframe.</span></div>`;
-    }
-
-    const loader = isPlayable ? `<div class="video-loading"><span class="loader-orbit" aria-hidden="true"></span><strong>Preparando reproductor</strong><small>${title}</small></div>` : "";
-    const help = state.liveUrl ? `<div class="live-help"><strong>${escapeHtml(resolved.platform)}:</strong> ${escapeHtml(resolved.message)} ${fallback ? `<a class="link light" href="${escapeHtml(fallback)}" target="_blank" rel="noopener noreferrer">Abrir enlace original</a>` : ""}</div>` : "";
-    return `<div class="video-frame video-stage ${orientation === "vertical" ? "is-vertical" : "is-wide"} ${isPlayable ? "is-loading" : "is-loaded"}">${player}${loader}</div>${help}`;
-  }
-
-  function initializeVideoPlayers() {
-    document.querySelectorAll(".video-stage iframe").forEach(frame => {
-      const stage = frame.closest(".video-stage");
-      const markLoaded = () => stage && stage.classList.add("is-loaded");
-      frame.addEventListener("load", markLoaded, { once: true });
-      setTimeout(markLoaded, 1800);
-    });
-
-    document.querySelectorAll(".video-stage video").forEach(video => {
-      const stage = video.closest(".video-stage");
-      const markLoaded = () => stage && stage.classList.add("is-loaded");
-      video.addEventListener("loadedmetadata", markLoaded, { once: true });
-      video.addEventListener("canplay", markLoaded, { once: true });
-      setTimeout(markLoaded, 1800);
-    });
-
-    document.querySelectorAll("video.hls-player[data-hls]").forEach(video => {
-      const src = video.dataset.hls;
-      if (!src) return;
-      if (video.canPlayType("application/vnd.apple.mpegurl")) {
-        video.src = src;
-      } else if (window.Hls && window.Hls.isSupported()) {
-        const hls = new window.Hls();
-        hls.loadSource(src);
-        hls.attachMedia(video);
-      } else {
-        video.outerHTML = `<div class="video-placeholder"><strong>HLS no soportado</strong><span>Este navegador no puede reproducir este streaming directamente. Usa el botón de enlace externo.</span></div>`;
-      }
-    });
-  }
-
-  function statusBadgeClass(estado) {
-    if (["Respondida", "Notificada", "Cerrada", "Respondida en vivo"].includes(estado)) return "green";
-    if (["Priorizada para live", "Reasignada", "En elaboración de respuesta"].includes(estado)) return "gold";
-    if (["Escalada"].includes(estado)) return "red";
-    if (["Asignada", "Pendiente de respuesta escrita"].includes(estado)) return "blue";
-    return "gray";
-  }
-
-  function showToast(message) {
-    clearTimeout(toastTimer);
-    let node = document.querySelector(".toast");
-    if (!node) {
-      node = document.createElement("div");
-      node.className = "toast";
-      document.body.appendChild(node);
-    }
-    node.textContent = message;
-    toastTimer = setTimeout(() => node.remove(), 4200);
-  }
-
-  function optionList(items, selected) {
-    return items.map(item => `<option ${item === selected ? "selected" : ""}>${escapeHtml(item)}</option>`).join("");
-  }
-
-  function userOptions(selectedId, includeTodos = false) {
-    const asignables = state.usuarios.filter(u => u.activo && u.asignable);
-    return `${includeTodos ? `<option value="Todos" ${selectedId === "Todos" ? "selected" : ""}>Todos</option>` : ""}${asignables.map(u => `<option value="${escapeHtml(u.id)}" ${u.id === selectedId ? "selected" : ""}>${escapeHtml(u.cargo)} — ${escapeHtml(u.nombre)}</option>`).join("")}`;
-  }
-
-  function setTab(tab) {
-    activeTab = tab;
-    render();
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  }
-
-  function audit(radicado, accion, usuario, antes, despues, motivo) {
-    state.auditoria = [{ id: crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`, radicado, accion, usuario, antes, despues, motivo, fecha: nowIso() }, ...state.auditoria];
-  }
-
-  function updateSolicitud(radicado, patch, motivo = "Actualización desde panel") {
-    const current = state.solicitudes.find(s => s.radicado === radicado);
-    if (!current) return;
-    state.solicitudes = state.solicitudes.map(s => s.radicado === radicado ? { ...s, ...patch } : s);
-    audit(radicado, "Actualización", "Panel interno", JSON.stringify(current), JSON.stringify({ ...current, ...patch }), motivo);
-    saveState();
-    render();
-  }
-
-  function stats() {
-    const total = state.solicitudes.length;
-    const enVivo = state.solicitudes.filter(s => s.respondidaEnVivo).length;
-    const pendientes = state.solicitudes.filter(s => ["Recibida", "En revisión", "Asignada", "Reasignada", "Pendiente de respuesta escrita", "En elaboración de respuesta"].includes(s.estado)).length;
-    const cerradas = state.solicitudes.filter(s => ["Respondida", "Notificada", "Cerrada", "Respondida en vivo"].includes(s.estado)).length;
-    return { total, enVivo, pendientes, cerradas };
-  }
-
-  function renderHero() {
-    return `
-      <section class="hero">
-        <div>
-          <div class="brand">
-            <div class="logo-box" aria-label="Logo institucional"><img src="assets/logo.png" alt="Escudo institucional" /></div>
-            <div>
-              <p class="eyebrow">Alcaldía Municipal de San Pedro Valle</p>
-              <h1>Rendición de Cuentas 2026</h1>
-              <p class="lead">Participa en vivo, registra preguntas, dudas, inquietudes, peticiones o propuestas, y consulta la respuesta oficial mediante radicado.</p>
-              <div class="hero-actions">
-                <button class="btn" data-tab="publico">Registrar pregunta</button>
-                <button class="btn secondary" data-tab="consulta">Consultar respuesta</button>
-                <button class="btn ghost" data-tab="superadmin">Panel interno</button>
-              </div>
-            </div>
-          </div>
-        </div>
-        <div class="live-card">
-          <div class="live-status"><span class="pulse"></span> ${escapeHtml(state.eventoEstado)}</div>
-          ${renderVideoPlayer()}
-        </div>
-      </section>`;
-  }
-
-  function renderNav() {
-    const tabs = [
-      ["publico", "Participación ciudadana"],
-      ["consulta", "Consulta por radicado"],
-      ["superadmin", "Super Admin"],
-      ["responsable", "Responsables"],
-      ["seguridad", "Seguridad"]
-    ];
-    return `<nav class="nav-tabs" aria-label="Navegación principal">${tabs.map(([key, label]) => `<button class="tab-btn ${activeTab === key ? "active" : ""}" data-tab="${key}">${label}</button>`).join("")}</nav>`;
-  }
-
-  function renderPublico() {
-    return `
-      <section class="grid">
-        <div class="card col-7">
-          <h2>Registrar pregunta, duda, inquietud, petición o propuesta</h2>
-          <p>La solicitud queda con radicado automático, hora exacta, responsable asignado y trazabilidad para respuesta oficial.</p>
-          <form id="preguntaForm">
-            <div class="form-row">
-              <div class="field"><label>Nombre completo</label><input class="input" name="nombreCiudadano" placeholder="Nombre del ciudadano" /></div>
-              <div class="field"><label>Barrio o vereda *</label><input class="input" name="barrioVereda" placeholder="Ej. Centro, corregimiento, vereda..." required /></div>
-            </div>
-            <div class="form-row three">
-              <div class="field"><label>Correo electrónico</label><input class="input" type="email" name="correo" placeholder="correo@dominio.com" /></div>
-              <div class="field"><label>Celular</label><input class="input" name="celular" inputmode="tel" placeholder="Número de contacto" /></div>
-              <div class="field"><label>Zona</label><select class="select" name="zona"><option>Urbana</option><option>Rural</option><option selected>No informa</option></select></div>
-            </div>
-            <div class="form-row three">
-              <div class="field"><label>Tipo de participante</label><select class="select" name="tipoParticipante">${optionList(tiposParticipante, "Ciudadano")}</select></div>
-              <div class="field"><label>Tipo de solicitud</label><select class="select" name="tipoSolicitud">${optionList(tiposSolicitud, "Pregunta")}</select></div>
-              <div class="field"><label>Tema</label><select class="select" name="tema">${optionList(temas, "Alcaldía / Gestión general")}</select></div>
-            </div>
-            <div class="field"><label>Dirigida a</label><select class="select" name="responsableId">${userOptions("diego-fernando-mendoza")}</select></div>
-            <div class="field"><label>Texto de la solicitud *</label><textarea class="textarea" name="mensaje" maxlength="1800" placeholder="Escribe la pregunta o solicitud que deseas realizar durante la Rendición de Cuentas 2026." required></textarea><span class="small muted">Máximo 1.800 caracteres.</span></div>
-            <div class="field">
-              <label class="check"><input type="checkbox" name="tratamientoDatos" required /> <span>Autorizo el tratamiento de mis datos personales para gestionar mi participación, responder mi solicitud, realizar trazabilidad institucional y generar reportes estadísticos de la Rendición de Cuentas 2026.</span></label>
-            </div>
-            <input type="hidden" name="latitud" />
-            <input type="hidden" name="longitud" />
-            <input type="hidden" name="ubicacionAutorizada" value="false" />
-            <div class="action-bar">
-              <button class="btn" type="submit">Enviar y generar radicado</button>
-              <button class="btn secondary" type="button" id="locationBtn">Compartir ubicación aproximada</button>
-            </div>
-          </form>
-        </div>
-        <div class="card col-5">
-          <h2>Preguntas respondidas en vivo</h2>
-          <p>Cuando una solicitud se marque como respondida en vivo, aparecerá aquí para consulta pública.</p>
-          ${renderRespondidasEnVivo()}
-        </div>
-      </section>`;
-  }
-
-  function renderRespondidasEnVivo() {
-    const items = state.solicitudes.filter(s => s.respondidaEnVivo).slice(0, 8);
-    if (!items.length) return `<div class="empty">Aún no hay preguntas marcadas como respondidas en vivo.</div>`;
-    return `<div class="security-list">${items.map(s => `<div class="security-item"><span class="badge green">${escapeHtml(s.radicado)}</span><div><b>${escapeHtml(s.tema)}</b><div class="small muted">${escapeHtml(s.dirigidaA)} ${s.minutoLive ? `— minuto ${escapeHtml(s.minutoLive)}` : ""}</div><div>${escapeHtml(s.mensaje).slice(0, 180)}${String(s.mensaje).length > 180 ? "..." : ""}</div></div></div>`).join("")}</div>`;
-  }
-
-  function renderConsulta() {
-    const consulta = state.solicitudes.find(s => String(s.radicado).toLowerCase() === consultaRadicado.trim().toLowerCase());
-    return `
-      <section class="grid">
-        <div class="card col-5">
-          <h2>Consultar respuesta con radicado</h2>
-          <p>Ingresa el radicado entregado al registrar la participación.</p>
-          <form id="consultaForm">
-            <div class="field"><label>Radicado</label><input class="input" name="radicado" value="${escapeHtml(consultaRadicado)}" placeholder="RC-2026-000001" /></div>
-            <button class="btn" type="submit">Consultar</button>
-          </form>
-          <div class="divider"></div>
-          <p class="small muted">En producción, esta consulta debe usar un token seguro además del radicado para proteger datos personales.</p>
-        </div>
-        <div class="card col-7">
-          ${consulta ? renderConsultaResultado(consulta) : `<div class="empty">Aún no se ha consultado un radicado válido.</div>`}
-        </div>
-      </section>`;
-  }
-
-  function renderConsultaResultado(s) {
-    const respuesta = s.respuestaOficial ? escapeHtml(s.respuestaOficial) : "La solicitud aún no tiene respuesta oficial registrada.";
-    return `
-      <h2>Resultado de la solicitud</h2>
-      <div class="answer-box">
-        <span class="badge ${statusBadgeClass(s.estado)}">${escapeHtml(s.estado)}</span>
-        <h3>${escapeHtml(s.radicado)}</h3>
-        <p><b>Responsable:</b> ${escapeHtml(s.dirigidaA)} — ${escapeHtml(s.dependenciaAsignada)}</p>
-        <p><b>Tema:</b> ${escapeHtml(s.tema)} | <b>Tipo:</b> ${escapeHtml(s.tipoSolicitud)}</p>
-        <p><b>Fecha de registro:</b> ${formatDate(s.createdAt)}</p>
-        <div class="divider"></div>
-        <p><b>Solicitud:</b><br>${escapeHtml(s.mensaje)}</p>
-        <p><b>Respuesta oficial:</b><br>${respuesta}</p>
-        ${s.respondidaEnVivo ? `<p><b>Respondida en vivo:</b> Sí ${s.minutoLive ? `— minuto ${escapeHtml(s.minutoLive)}` : ""}</p>` : ""}
-        ${s.evidenciaUrl ? `<p><b>Evidencia / hipervínculo:</b> <a class="link" href="${escapeHtml(s.evidenciaUrl)}" target="_blank" rel="noopener noreferrer">Abrir soporte</a></p>` : ""}
-        <p class="small muted"><b>Fecha de respuesta:</b> ${formatDate(s.answeredAt)} | <b>Fecha de cierre:</b> ${formatDate(s.closedAt)}</p>
-      </div>`;
-  }
-
-  function renderSuperAdmin() {
-    const st = stats();
-    const filtered = filteredSolicitudes();
-    return `
-      <section class="grid">
-        <div class="card col-12">
-          <div class="notice"><b>Modo de prueba para GitHub Pages:</b> esta versión funciona sin instalar Node.js y guarda los datos en el navegador. Sirve para visualizar y validar el flujo. Para evento real con varios ciudadanos al tiempo, se conecta después a Firebase/Vercel.</div>
-        </div>
-        <div class="card col-12">
-          <div class="stats">
-            <div class="stat"><span>Total solicitudes</span><strong>${st.total}</strong></div>
-            <div class="stat"><span>Respondidas en vivo</span><strong>${st.enVivo}</strong></div>
-            <div class="stat"><span>Pendientes</span><strong>${st.pendientes}</strong></div>
-            <div class="stat"><span>Cerradas</span><strong>${st.cerradas}</strong></div>
-          </div>
-        </div>
-        <div class="card col-5 live-manager-card">
-          <div class="section-heading">
-            <div>
-              <span class="mini-label">Gestor rápido del live</span>
-              <h2>Actualizar solo el video</h2>
-            </div>
-            <span class="badge green">No toca preguntas</span>
-          </div>
-          <p>Pega aquí el código iframe que te entrega Facebook Live Producer, un enlace de YouTube, Facebook, video viejo, reel o archivo de video. Al guardar, la app reemplaza únicamente el reproductor del inicio.</p>
-          <div class="notice small"><b>Importante en GitHub Pages:</b> esta demo guarda el cambio en este navegador. Para que el cambio se vea automáticamente para todos los ciudadanos, el siguiente paso es conectar este mismo campo a Firebase/Firestore o Vercel backend. La interfaz ya queda preparada para ese flujo.</div>
-          <form id="liveForm">
-            <div class="field"><label>Código iframe o enlace del nuevo live/video</label><textarea class="textarea compact-textarea live-code-box" name="liveUrl" placeholder="Pega aquí el iframe completo de Facebook o el enlace del video. Ejemplo: &lt;iframe src='https://www.facebook.com/plugins/video.php?href=...'&gt;&lt;/iframe&gt;">${escapeHtml(state.liveUrl)}</textarea></div>
-            <div class="form-row">
-              <div class="field"><label>Estado del evento</label><select class="select" name="eventoEstado">${optionList(["Programado", "En vivo", "Grabación disponible", "Cerrado"], state.eventoEstado)}</select></div>
-              <div class="field"><label>Plataforma detectada</label><input class="input" value="${escapeHtml(livePlatformName(state.liveUrl))}" readonly /></div>
-            </div>
-            <div class="action-bar">
-              <button class="btn" type="submit">Actualizar live/video</button>
-              <button class="btn secondary" type="button" data-action="clear-live">Quitar video</button>
-            </div>
-          </form>
-          <div class="divider"></div>
-          <h3>Vista previa del reproductor</h3>
-          <div class="admin-video-preview">${renderVideoPlayer()}</div>
-        </div>
-        <div class="card col-7">
-          <h2>Crear usuario responsable</h2>
-          <p>El Super Admin puede crear usuarios internos y dejarlos disponibles para asignación.</p>
-          <form id="userForm">
-            <div class="form-row"><div class="field"><label>Nombre</label><input class="input" name="nombre" required /></div><div class="field"><label>Cargo</label><input class="input" name="cargo" required /></div></div>
-            <div class="form-row"><div class="field"><label>Dependencia</label><input class="input" name="dependencia" required /></div><div class="field"><label>Correo</label><input class="input" name="correo" type="email" /></div></div>
-            <div class="field"><label>Celular</label><input class="input" name="celular" /></div>
-            <button class="btn" type="submit">Crear usuario</button>
-          </form>
-        </div>
-        <div class="card col-12">
-          <div class="action-bar" style="justify-content:space-between">
-            <div><h2>Control de solicitudes</h2><p>Revisar, filtrar, reasignar, priorizar para live, responder y exportar.</p></div>
-            <div class="action-bar"><button class="btn secondary" data-action="export-csv">Exportar CSV/Excel</button><button class="btn danger" data-action="reset-demo">Reiniciar demo local</button></div>
-          </div>
-          <div class="form-row three">
-            <div class="field"><label>Estado</label><select class="select" id="filterEstado"><option>Todos</option>${optionList(estados, filters.estado)}</select></div>
-            <div class="field"><label>Responsable</label><select class="select" id="filterResponsable">${userOptions(filters.responsableId, true)}</select></div>
-            <div class="field"><label>Búsqueda</label><input class="input" id="filterTexto" value="${escapeHtml(filters.texto)}" placeholder="Radicado, barrio, tema, texto..." /></div>
-          </div>
-          ${renderSolicitudesTable(filtered, false)}
-        </div>
-        <div class="card col-6">
-          <h2>Usuarios base</h2>
-          <div class="table-wrap"><table><thead><tr><th>Nombre</th><th>Cargo</th><th>Rol</th><th>Asignable</th></tr></thead><tbody>${state.usuarios.map(u => `<tr><td><b>${escapeHtml(u.nombre)}</b><br><span class="muted small">${escapeHtml(u.dependencia)}</span></td><td>${escapeHtml(u.cargo)}</td><td><span class="badge blue">${escapeHtml(u.rol)}</span></td><td>${u.asignable ? "Sí" : "No"}</td></tr>`).join("")}</tbody></table></div>
-        </div>
-        <div class="card col-6">
-          <h2>Auditoría reciente</h2>
-          ${renderAuditoria()}
-        </div>
-      </section>`;
-  }
-
-  function filteredSolicitudes() {
-    return state.solicitudes.filter(s => {
-      const byEstado = filters.estado === "Todos" || s.estado === filters.estado;
-      const byResponsable = filters.responsableId === "Todos" || s.responsableId === filters.responsableId;
-      const q = filters.texto.trim().toLowerCase();
-      const byText = !q || [s.radicado, s.nombreCiudadano, s.barrioVereda, s.mensaje, s.tema, s.dependenciaAsignada].join(" ").toLowerCase().includes(q);
-      return byEstado && byResponsable && byText;
-    });
-  }
-
-  function renderAuditoria() {
-    if (!state.auditoria.length) return `<div class="empty">Aún no hay cambios auditados.</div>`;
-    return `<div class="security-list">${state.auditoria.slice(0, 8).map(a => `<div class="security-item"><span class="badge">${escapeHtml(a.radicado)}</span><div><b>${escapeHtml(a.accion)}</b><div class="small muted">${formatDate(a.fecha)} — ${escapeHtml(a.usuario)}</div><div class="small">${escapeHtml(a.motivo)}</div></div></div>`).join("")}</div>`;
-  }
-
-  function renderResponsable() {
-    const user = state.usuarios.find(u => u.id === selectedResponsable) || state.usuarios[0];
-    const assigned = state.solicitudes.filter(s => s.responsableId === selectedResponsable);
-    return `
-      <section class="grid">
-        <div class="card col-4">
-          <h2>Panel de responsable</h2>
-          <p>Selecciona un usuario para simular su bandeja. En producción esto será con inicio de sesión real.</p>
-          <div class="field"><label>Usuario responsable</label><select class="select" id="selectResponsable">${userOptions(selectedResponsable)}</select></div>
-          <div class="answer-box"><h3>${escapeHtml(user.nombre)}</h3><p>${escapeHtml(user.cargo)}</p><span class="badge blue">Solicitudes asignadas: ${assigned.length}</span></div>
-        </div>
-        <div class="card col-8">
-          <h2>Solicitudes asignadas</h2>
-          ${renderSolicitudesTable(assigned, true)}
-        </div>
-      </section>`;
-  }
-
-  function renderSeguridad() {
-    return `
-      <section class="grid">
-        <div class="card col-7">
-          <h2>Parámetros de seguridad para producción</h2>
-          <p>Esta versión de GitHub Pages es solo para visualización inicial. Para producción, los datos reales deben entrar por backend, autenticación y reglas.</p>
-          <div class="security-list">
-            ${securityItem("Repositorio privado + Vercel", "El repositorio puede quedar privado y Vercel despliega desde GitHub. El código frontend que llega al navegador no queda totalmente oculto; lo sensible debe ir en backend.")}
-            ${securityItem("Firebase Auth", "Los secretarios, alcalde, gestora, técnicas y CIO TICs deben iniciar sesión. No se deben quemar contraseñas ni PIN en el frontend.")}
-            ${securityItem("API segura para formulario público", "La ciudadanía no debe escribir directo en Firestore. La solicitud debe pasar por una función backend con validación, rate limit y reCAPTCHA/App Check.")}
-            ${securityItem("Reglas por rol", "Super Admin ve y reasigna todo. Cada responsable ve solo lo asignado. Ciudadano consulta con radicado y token seguro.")}
-            ${securityItem("Auditoría inalterable", "Toda reasignación, respuesta, cierre o notificación debe guardar usuario, fecha, hora, antes, después y motivo.")}
-            ${securityItem("Datos personales", "El formulario debe solicitar autorización de tratamiento de datos y recolectar solo lo necesario.")}
-          </div>
-        </div>
-        <div class="card col-5">
-          <h2>Checklist técnico</h2>
-          <div class="kpi-strip"><span>HTTPS obligatorio</span><span>reCAPTCHA/App Check</span><span>Rate limiting</span><span>Sanitización XSS</span><span>Variables de entorno</span><span>Backups</span><span>Logs de acceso</span><span>Firestore Rules</span><span>Token de consulta pública</span><span>Exportación controlada</span></div>
-          <div class="divider"></div>
-          <p class="small muted">Cuando pasemos a Vercel/Firebase, esta misma interfaz se conecta a base de datos real, autenticación y notificaciones.</p>
-        </div>
-      </section>`;
-  }
-
-  function securityItem(title, text) {
-    return `<div class="security-item"><span class="badge blue">✓</span><div><b>${escapeHtml(title)}</b><div class="small">${escapeHtml(text)}</div></div></div>`;
-  }
-
-  function renderSolicitudesTable(solicitudes, compactRole) {
-    if (!solicitudes.length) return `<div class="empty">No hay solicitudes para mostrar.</div>`;
-    return `<div class="table-wrap"><table><thead><tr><th>Radicado</th><th>Ciudadano / territorio</th><th>Solicitud</th><th>Responsable</th><th>Estado</th><th>Gestión</th></tr></thead><tbody>${solicitudes.map(s => renderSolicitudRow(s, compactRole)).join("")}</tbody></table></div>`;
-  }
-
-  function renderSolicitudRow(s, compactRole) {
-    return `
-      <tr data-radicado="${escapeHtml(s.radicado)}">
-        <td><b>${escapeHtml(s.radicado)}</b><br><span class="small muted">${formatDate(s.createdAt)}</span></td>
-        <td><b>${escapeHtml(s.nombreCiudadano)}</b><br>${escapeHtml(s.barrioVereda)} — ${escapeHtml(s.zona)}<br><span class="small muted">${escapeHtml(s.correo || "Sin correo")} | ${escapeHtml(s.celular || "Sin celular")}</span>${s.ubicacionAutorizada ? `<br><span class="small muted">Ubicación: ${escapeHtml(s.latitud)}, ${escapeHtml(s.longitud)}</span>` : ""}</td>
-        <td><span class="badge blue">${escapeHtml(s.tipoSolicitud)}</span> <span class="badge">${escapeHtml(s.tema)}</span><br>${escapeHtml(s.mensaje)}${s.respondidaEnVivo ? `<br><span class="badge green">Respondida en vivo ${s.minutoLive ? `— ${escapeHtml(s.minutoLive)}` : ""}</span>` : ""}</td>
-        <td><b>${escapeHtml(s.dirigidaA)}</b><br><span class="small muted">${escapeHtml(s.dependenciaAsignada)}</span>${!compactRole ? `<div class="field" style="margin-top:8px"><select class="select compact reassignSelect">${userOptions(s.responsableId)}</select><button class="btn secondary compact" data-action="reassign" data-radicado="${escapeHtml(s.radicado)}" type="button">Reasignar</button></div>` : ""}</td>
-        <td><span class="badge ${statusBadgeClass(s.estado)}">${escapeHtml(s.estado)}</span><div class="field" style="margin-top:8px"><select class="select compact estadoSelect">${optionList(estados, s.estado)}</select><button class="btn ghost compact" data-action="change-estado" data-radicado="${escapeHtml(s.radicado)}" type="button">Cambiar</button></div>${s.notificacionEnviada ? `<br><span class="badge green">Notificada</span>` : ""}</td>
-        <td>
-          <div class="field"><label>Respuesta oficial</label><textarea class="textarea respuestaInput" placeholder="Respuesta oficial para el ciudadano">${escapeHtml(s.respuestaOficial || "")}</textarea></div>
-          <div class="form-row">
-            <div class="field"><label>Minuto live</label><input class="input minutoInput" value="${escapeHtml(s.minutoLive || "")}" placeholder="01:18:40" /></div>
-            <div class="field"><label>Evidencia / URL</label><input class="input evidenciaInput" value="${escapeHtml(s.evidenciaUrl || "")}" placeholder="https://..." /></div>
-          </div>
-          <label class="check"><input type="checkbox" class="enVivoInput" ${s.respondidaEnVivo ? "checked" : ""} /> <span>Respondida en vivo</span></label>
-          <div class="action-bar" style="margin-top:10px">
-            <button class="btn success compact" data-action="save-respuesta" data-radicado="${escapeHtml(s.radicado)}" type="button">Guardar respuesta</button>
-            <button class="btn gold compact" data-action="mark-notificada" data-radicado="${escapeHtml(s.radicado)}" type="button">Marcar notificada</button>
-          </div>
-        </td>
-      </tr>`;
-  }
-
-  function render() {
-    const section = activeTab === "publico" ? renderPublico()
-      : activeTab === "consulta" ? renderConsulta()
-      : activeTab === "superadmin" ? renderSuperAdmin()
-      : activeTab === "responsable" ? renderResponsable()
-      : renderSeguridad();
-
-    root.innerHTML = `<main class="app-shell">${renderHero()}${renderNav()}${section}</main>`;
-    bindForms();
-    initializeVideoPlayers();
-  }
-
-  function bindForms() {
-    document.querySelectorAll("[data-tab]").forEach(btn => btn.addEventListener("click", () => setTab(btn.dataset.tab)));
-
-    const preguntaForm = document.getElementById("preguntaForm");
-    if (preguntaForm) preguntaForm.addEventListener("submit", handlePregunta);
-
-    const consultaForm = document.getElementById("consultaForm");
-    if (consultaForm) consultaForm.addEventListener("submit", handleConsulta);
-
-    const liveForm = document.getElementById("liveForm");
-    if (liveForm) liveForm.addEventListener("submit", handleLive);
-
-    const userForm = document.getElementById("userForm");
-    if (userForm) userForm.addEventListener("submit", handleUser);
-
-    const locationBtn = document.getElementById("locationBtn");
-    if (locationBtn) locationBtn.addEventListener("click", requestLocation);
-
-    const filterEstado = document.getElementById("filterEstado");
-    if (filterEstado) filterEstado.addEventListener("change", e => { filters.estado = e.target.value; render(); });
-    const filterResponsable = document.getElementById("filterResponsable");
-    if (filterResponsable) filterResponsable.addEventListener("change", e => { filters.responsableId = e.target.value; render(); });
-    const filterTexto = document.getElementById("filterTexto");
-    if (filterTexto) filterTexto.addEventListener("input", e => { filters.texto = e.target.value; clearTimeout(filterTexto._timer); filterTexto._timer = setTimeout(render, 250); });
-    const selectResponsable = document.getElementById("selectResponsable");
-    if (selectResponsable) selectResponsable.addEventListener("change", e => { selectedResponsable = e.target.value; render(); });
-  }
-
-  function handlePregunta(event) {
-    event.preventDefault();
-    const data = new FormData(event.currentTarget);
-    if (!data.get("tratamientoDatos")) {
-      showToast("Debes aceptar la autorización de tratamiento de datos.");
-      return;
-    }
-    const mensaje = String(data.get("mensaje") || "").trim();
-    const barrioVereda = String(data.get("barrioVereda") || "").trim();
-    if (!mensaje || !barrioVereda) {
-      showToast("Completa barrio/vereda y el texto de la solicitud.");
-      return;
-    }
-    const responsable = state.usuarios.find(u => u.id === data.get("responsableId")) || state.usuarios[0];
-    const radicado = nextRadicado();
-    const solicitud = {
-      radicado,
-      anio: 2026,
-      nombreCiudadano: String(data.get("nombreCiudadano") || "").trim() || "Ciudadano no identificado",
-      correo: String(data.get("correo") || "").trim(),
-      celular: String(data.get("celular") || "").trim(),
-      barrioVereda,
-      zona: String(data.get("zona") || "No informa"),
-      tipoParticipante: String(data.get("tipoParticipante") || "Ciudadano"),
-      tipoSolicitud: String(data.get("tipoSolicitud") || "Pregunta"),
-      tema: String(data.get("tema") || "Alcaldía / Gestión general"),
-      dirigidaA: responsable.nombre,
-      responsableId: responsable.id,
-      dependenciaAsignada: responsable.dependencia,
-      mensaje,
-      estado: "Asignada",
+async function submitPublicForm(event) {
+  event.preventDefault();
+  const fd = new FormData(event.currentTarget);
+  const assignedTo = clean(fd.get("assignedTo"), 80);
+  if (!assignedTo) return toast("Selecciona a quién va dirigida la solicitud.", "error");
+  const id = radicado();
+  const consultaToken = token();
+  const lookupId = `${id}_${consultaToken}`;
+  const responsable = state.responsables.find(r => r.id === assignedTo) || {};
+  const data = {
+    radicado: id,
+    consultaToken,
+    anio: 2026,
+    nombreCiudadano: clean(fd.get("nombreCiudadano"), 90),
+    correo: clean(fd.get("correo"), 120),
+    celular: clean(fd.get("celular"), 20),
+    barrioVereda: clean(fd.get("barrioVereda"), 90),
+    zona: clean(fd.get("zona"), 20),
+    tipoParticipante: clean(fd.get("tipoParticipante"), 50),
+    tipoSolicitud: clean(fd.get("tipoSolicitud"), 50),
+    tema: clean(fd.get("tema"), 80),
+    assignedTo,
+    responsableNombre: responsable.nombre || "",
+    responsableCargo: responsable.cargo || "",
+    dependencia: responsable.dependencia || "",
+    mensaje: clean(fd.get("mensaje"), 1800),
+    estado: "recibida",
+    respondidaEnVivo: false,
+    respuestaOficial: "",
+    evidenciaUrl: "",
+    minutoLive: "",
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp()
+  };
+  if (!data.nombreCiudadano || !data.barrioVereda || !data.mensaje) return toast("Completa los campos obligatorios.", "error");
+  try {
+    const batch = writeBatch(db);
+    batch.set(doc(db, "solicitudes", id), data);
+    batch.set(doc(db, "publicResponses", lookupId), {
+      radicado: id,
+      consultaToken,
+      estado: "recibida",
+      tema: data.tema,
+      tipoSolicitud: data.tipoSolicitud,
+      pregunta: data.mensaje,
+      assignedTo,
+      responsable: `${data.responsableCargo} - ${data.responsableNombre}`,
       respondidaEnVivo: false,
-      minutoLive: "",
       respuestaOficial: "",
       evidenciaUrl: "",
-      notificacionEnviada: false,
-      ubicacionAutorizada: data.get("ubicacionAutorizada") === "true",
-      latitud: data.get("latitud") ? Number(data.get("latitud")) : "",
-      longitud: data.get("longitud") ? Number(data.get("longitud")) : "",
-      createdAt: nowIso(),
-      assignedAt: nowIso(),
-      answeredAt: "",
-      closedAt: ""
-    };
-    state.solicitudes = [solicitud, ...state.solicitudes];
-    audit(radicado, "Creación de solicitud", "Formulario ciudadano", "Sin registro", responsable.nombre, "Solicitud creada desde el portal público.");
-    saveState();
-    consultaRadicado = radicado;
-    activeTab = "consulta";
-    render();
-    showToast(`Solicitud registrada correctamente. Radicado: ${radicado}`);
+      minutoLive: "",
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp()
+    });
+    await batch.commit();
+    event.currentTarget.reset();
+    $("#radicadoBox").classList.remove("hidden");
+    $("#radicadoBox").innerHTML = `<h3>Solicitud registrada</h3><p><strong>Radicado:</strong> ${esc(id)}</p><p><strong>Código de consulta:</strong> ${esc(consultaToken)}</p><p>Guarda ambos datos para consultar la respuesta.</p>`;
+    toast("Solicitud registrada correctamente.");
+  } catch (error) {
+    toast("No fue posible registrar la solicitud. Revisa las reglas de Firebase.", "error");
   }
+}
 
-  function requestLocation() {
-    const form = document.getElementById("preguntaForm");
-    if (!form) return;
-    if (!navigator.geolocation) {
-      showToast("Este navegador no permite geolocalización.");
+async function lookupResponse(event) {
+  event.preventDefault();
+  const fd = new FormData(event.currentTarget);
+  const id = clean(fd.get("radicado"), 30).toUpperCase();
+  const consultaToken = clean(fd.get("token"), 20).toUpperCase();
+  try {
+    const snap = await getDoc(doc(db, "publicResponses", `${id}_${consultaToken}`));
+    const box = $("#lookupResult");
+    box.classList.remove("hidden");
+    if (!snap.exists()) {
+      box.innerHTML = `<strong>No se encontró una respuesta con esos datos.</strong><p>Verifica el radicado y el código de consulta.</p>`;
       return;
     }
-    navigator.geolocation.getCurrentPosition(
-      pos => {
-        form.elements.latitud.value = Number(pos.coords.latitude.toFixed(6));
-        form.elements.longitud.value = Number(pos.coords.longitude.toFixed(6));
-        form.elements.ubicacionAutorizada.value = "true";
-        showToast("Ubicación aproximada autorizada y registrada en la solicitud.");
-      },
-      () => showToast("No fue posible obtener la ubicación. Puedes continuar sin compartirla."),
-      { enableHighAccuracy: false, timeout: 7000, maximumAge: 60000 }
-    );
+    const data = snap.data();
+    box.innerHTML = `<h3>${esc(data.radicado)}</h3><p><strong>Estado:</strong> ${esc(labelEstado(data.estado))}</p><p><strong>Responsable:</strong> ${esc(data.responsable || responsableName(data.assignedTo))}</p><p><strong>Pregunta:</strong> ${esc(data.pregunta || "")}</p>${data.respondidaEnVivo ? `<p><strong>Respondida en vivo:</strong> Sí ${data.minutoLive ? `- Minuto ${esc(data.minutoLive)}` : ""}</p>` : ""}<p><strong>Respuesta oficial:</strong></p><p>${esc(data.respuestaOficial || "La respuesta aún se encuentra en trámite.")}</p>${data.evidenciaUrl ? `<p><a class="text-link" href="${esc(data.evidenciaUrl)}" target="_blank" rel="noopener noreferrer">Abrir evidencia o enlace</a></p>` : ""}`;
+  } catch (error) {
+    toast("No fue posible consultar la respuesta.", "error");
   }
+}
 
-  function handleConsulta(event) {
-    event.preventDefault();
-    const data = new FormData(event.currentTarget);
-    consultaRadicado = String(data.get("radicado") || "").trim();
-    render();
-    if (!state.solicitudes.some(s => String(s.radicado).toLowerCase() === consultaRadicado.toLowerCase())) showToast("No se encontró ese radicado en esta prueba local.");
+function labelEstado(value) {
+  const map = { recibida: "Recibida", asignada: "Asignada", respondida_en_vivo: "Respondida en vivo", respondida: "Respondida", cerrada: "Cerrada" };
+  return map[value] || value || "Recibida";
+}
+
+function renderLiveAnswered() {
+  const list = $("#liveAnsweredList");
+  const rows = state.publicResponses.filter(r => r.respondidaEnVivo || r.estado === "respondida_en_vivo");
+  if (!rows.length) {
+    list.innerHTML = `<div class="card"><strong>Aún no hay preguntas marcadas como respondidas en vivo.</strong><p>Cuando una dependencia marque una respuesta durante la transmisión, aparecerá aquí.</p></div>`;
+    return;
   }
+  list.innerHTML = rows.map(item => `<article class="card"><strong>${esc(item.radicado)}</strong><div class="badges"><span class="badge">${esc(item.tema || "Tema")}</span><span class="badge">${esc(item.minutoLive || "Live")}</span></div><p>${esc(item.pregunta || "")}</p><p><strong>Respuesta:</strong> ${esc(item.respuestaOficial || "Pendiente de consolidación")}</p></article>`).join("");
+}
 
-  function handleLive(event) {
-    event.preventDefault();
-    const data = new FormData(event.currentTarget);
-    state.liveUrl = String(data.get("liveUrl") || "").trim();
-    state.liveEmbedUrl = embedFromUrl(state.liveUrl);
-    state.eventoEstado = String(data.get("eventoEstado") || "Programado");
-    saveState();
-    render();
-    showToast("Configuración del live actualizada.");
+async function login(event) {
+  event.preventDefault();
+  const fd = new FormData(event.currentTarget);
+  try {
+    await signInWithEmailAndPassword(auth, fd.get("email"), fd.get("password"));
+    event.currentTarget.reset();
+    toast("Ingreso correcto.");
+  } catch (error) {
+    toast("Correo o contraseña incorrectos.", "error");
   }
+}
 
-  function handleUser(event) {
-    event.preventDefault();
-    const data = new FormData(event.currentTarget);
-    const nombre = String(data.get("nombre") || "").trim();
-    const cargo = String(data.get("cargo") || "").trim();
-    const dependencia = String(data.get("dependencia") || "").trim();
-    if (!nombre || !cargo || !dependencia) {
-      showToast("Nombre, cargo y dependencia son obligatorios.");
-      return;
-    }
-    const usuario = { id: `${slug(nombre)}-${Date.now().toString(36)}`, nombre, cargo, dependencia, rol: "responsable", correo: String(data.get("correo") || "").trim(), celular: String(data.get("celular") || "").trim(), activo: true, asignable: true };
-    state.usuarios.push(usuario);
-    saveState();
-    render();
-    showToast(`Usuario creado: ${usuario.nombre}.`);
+async function loadProfile(user) {
+  const snap = await getDoc(doc(db, "users", user.uid));
+  return snap.exists() ? { uid: user.uid, ...snap.data() } : null;
+}
+
+async function handleAuth(user) {
+  state.user = user;
+  state.profile = null;
+  $("#loginPanel").classList.toggle("hidden", !!user);
+  $("#privatePanel").classList.toggle("hidden", !user);
+  if (!user) return;
+  const profile = await loadProfile(user);
+  if (!profile || profile.activo === false) {
+    await signOut(auth);
+    toast("El usuario no tiene perfil activo en el sistema.", "error");
+    return;
   }
+  state.profile = profile;
+  $("#userWelcome").textContent = `${profile.nombre}`;
+  $("#userRoleLine").textContent = `${profile.cargo} · ${profile.dependencia}`;
+  $("#superTools").classList.toggle("hidden", profile.role !== "super_admin");
+  await ensureBaseData();
+  await loadRequests();
+}
 
-  function exportCsv() {
-    const header = ["Radicado", "Año", "Fecha y hora", "Nombre ciudadano", "Correo", "Celular", "Barrio/vereda", "Zona", "Tipo participante", "Tipo solicitud", "Tema", "Dirigida a", "Dependencia asignada", "Estado", "Respondida en vivo", "Minuto live", "Respuesta oficial", "Evidencia", "Notificación enviada", "Ubicación autorizada", "Latitud", "Longitud", "Fecha respuesta", "Fecha cierre"];
-    const rows = state.solicitudes.map(s => [s.radicado, s.anio, formatDate(s.createdAt), s.nombreCiudadano, s.correo, s.celular, s.barrioVereda, s.zona, s.tipoParticipante, s.tipoSolicitud, s.tema, s.dirigidaA, s.dependenciaAsignada, s.estado, s.respondidaEnVivo ? "Sí" : "No", s.minutoLive, s.respuestaOficial, s.evidenciaUrl, s.notificacionEnviada ? "Sí" : "No", s.ubicacionAutorizada ? "Sí" : "No", s.latitud, s.longitud, formatDate(s.answeredAt), formatDate(s.closedAt)]);
-    const escapeCsv = value => `"${String(value ?? "").replace(/"/g, '""')}"`;
-    const csv = [header, ...rows].map(row => row.map(escapeCsv).join(";")).join("\n");
-    const blob = new Blob([`\ufeff${csv}`], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `rendicion-cuentas-2026-${new Date().toISOString().slice(0, 10)}.csv`;
-    link.click();
-    URL.revokeObjectURL(url);
+async function loadRequests() {
+  if (!state.profile) return;
+  try {
+    let snap;
+    if (state.profile.role === "super_admin") snap = await getDocs(collection(db, "solicitudes"));
+    else snap = await getDocs(query(collection(db, "solicitudes"), where("assignedTo", "==", state.profile.responsibleId)));
+    state.solicitudes = snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a,b) => String(b.radicado).localeCompare(String(a.radicado)));
+    renderRequests();
+  } catch (error) {
+    toast("No fue posible cargar las solicitudes del panel.", "error");
   }
+}
 
-  function findRowButton(button) {
-    const row = button.closest("tr[data-radicado]");
-    if (!row) return null;
-    const radicado = row.dataset.radicado;
-    const solicitud = state.solicitudes.find(s => s.radicado === radicado);
-    return { row, radicado, solicitud };
+function renderRequests() {
+  const text = clean($("#searchBox").value, 120).toLowerCase();
+  const status = $("#statusFilter").value;
+  let rows = [...state.solicitudes];
+  if (status) rows = rows.filter(r => r.estado === status);
+  if (text) rows = rows.filter(r => JSON.stringify(r).toLowerCase().includes(text));
+  const list = $("#requestsList");
+  if (!rows.length) {
+    list.innerHTML = `<div class="request-item"><div><strong>No hay solicitudes para mostrar.</strong><p>Los registros aparecerán de acuerdo con los permisos del usuario.</p></div></div>`;
+    return;
   }
+  list.innerHTML = rows.map(item => `<article class="request-item"><div><strong>${esc(item.radicado)}</strong><div class="badges"><span class="badge">${esc(labelEstado(item.estado))}</span><span class="badge">${esc(item.tema)}</span><span class="badge">${esc(responsableName(item.assignedTo))}</span></div><p>${esc(item.mensaje)}</p><small>${esc(formatDate(item.createdAt))}</small></div><button class="primary" type="button" data-open="${esc(item.id)}">Gestionar</button></article>`).join("");
+  $$('[data-open]').forEach(btn => btn.addEventListener("click", () => openRequest(btn.dataset.open)));
+}
 
-  document.addEventListener("click", event => {
-    const button = event.target.closest("button[data-action]");
-    if (!button) return;
-    const action = button.dataset.action;
+function openRequest(id) {
+  const item = state.solicitudes.find(r => r.id === id);
+  if (!item) return;
+  state.selectedRequest = item;
+  $("#dialogRadicado").textContent = item.radicado;
+  $("#dialogTitle").textContent = item.tipoSolicitud || "Solicitud ciudadana";
+  $("#dialogMeta").innerHTML = `<div><strong>Ciudadano:</strong> ${esc(item.nombreCiudadano)}</div><div><strong>Barrio/vereda:</strong> ${esc(item.barrioVereda)} · ${esc(item.zona)}</div><div><strong>Dirigida a:</strong> ${esc(responsableName(item.assignedTo))}</div><div><strong>Mensaje:</strong> ${esc(item.mensaje)}</div>`;
+  $("#reassignField").classList.toggle("hidden", state.profile?.role !== "super_admin");
+  $("#dialogAssignedTo").value = item.assignedTo || "";
+  const form = $("#answerForm");
+  form.estado.value = item.estado || "recibida";
+  form.respondidaEnVivo.checked = !!item.respondidaEnVivo;
+  form.minutoLive.value = item.minutoLive || "";
+  form.evidenciaUrl.value = item.evidenciaUrl || "";
+  form.respuestaOficial.value = item.respuestaOficial || "";
+  $("#requestDialog").showModal();
+}
 
-    if (action === "export-csv") return exportCsv();
-    if (action === "clear-live") {
-      state.liveUrl = "";
-      state.liveEmbedUrl = "";
-      state.eventoEstado = "Programado";
-      saveState();
-      render();
-      showToast("Reproductor del live retirado. Puedes pegar uno nuevo cuando lo tengas.");
-      return;
-    }
-    if (action === "reset-demo") {
-      if (confirm("Esto borrará las solicitudes de prueba guardadas en este navegador. ¿Continuar?")) {
-        localStorage.removeItem(STORAGE_KEY);
-        state = defaultState();
-        consultaRadicado = "";
-        filters = { estado: "Todos", responsableId: "Todos", texto: "" };
-        render();
-        showToast("Base local reiniciada.");
-      }
-      return;
-    }
+async function saveAnswer(event) {
+  event.preventDefault();
+  const item = state.selectedRequest;
+  if (!item) return;
+  const fd = new FormData(event.currentTarget);
+  const assignedTo = state.profile.role === "super_admin" ? clean(fd.get("assignedTo"), 80) : item.assignedTo;
+  const estado = clean(fd.get("estado"), 40);
+  const response = {
+    assignedTo,
+    estado,
+    respondidaEnVivo: fd.get("respondidaEnVivo") === "on" || estado === "respondida_en_vivo",
+    minutoLive: clean(fd.get("minutoLive"), 12),
+    evidenciaUrl: clean(fd.get("evidenciaUrl"), 300),
+    respuestaOficial: clean(fd.get("respuestaOficial"), 2800),
+    updatedAt: serverTimestamp()
+  };
+  if (["respondida", "respondida_en_vivo", "cerrada"].includes(estado)) response.answeredAt = serverTimestamp();
+  try {
+    const batch = writeBatch(db);
+    batch.update(doc(db, "solicitudes", item.id), response);
+    batch.set(doc(db, "publicResponses", `${item.radicado}_${item.consultaToken}`), {
+      radicado: item.radicado,
+      consultaToken: item.consultaToken,
+      estado: response.estado,
+      tema: item.tema,
+      tipoSolicitud: item.tipoSolicitud,
+      pregunta: item.mensaje,
+      assignedTo: response.assignedTo,
+      responsable: responsableName(response.assignedTo),
+      respondidaEnVivo: response.respondidaEnVivo,
+      minutoLive: response.minutoLive,
+      evidenciaUrl: response.evidenciaUrl,
+      respuestaOficial: response.respuestaOficial,
+      updatedAt: serverTimestamp()
+    }, { merge: true });
+    batch.set(doc(collection(db, "auditoria")), { radicado: item.radicado, accion: "actualizar_respuesta", usuario: state.profile.uid, nombre: state.profile.nombre, createdAt: serverTimestamp() });
+    await batch.commit();
+    $("#requestDialog").close();
+    toast("Respuesta guardada.");
+    await loadRequests();
+    await loadPublicData();
+  } catch (error) {
+    toast("No fue posible guardar la respuesta.", "error");
+  }
+}
 
-    const info = findRowButton(button);
-    if (!info || !info.solicitud) return;
-    const { row, radicado, solicitud } = info;
+async function saveLive(event) {
+  event.preventDefault();
+  const fd = new FormData(event.currentTarget);
+  try {
+    await setDoc(doc(db, "config", "rendicion-2026"), { title: clean(fd.get("title"), 100) || "Live institucional", embed: String(fd.get("embed") || "").trim(), updatedAt: serverTimestamp(), updatedBy: state.profile.uid }, { merge: true });
+    await loadPublicData();
+    toast("Transmisión actualizada.");
+  } catch (error) {
+    toast("No fue posible actualizar la transmisión.", "error");
+  }
+}
 
-    if (action === "reassign") {
-      const select = row.querySelector(".reassignSelect");
-      const responsable = state.usuarios.find(u => u.id === select.value);
-      if (!responsable) return;
-      updateSolicitud(radicado, { responsableId: responsable.id, dirigidaA: responsable.nombre, dependenciaAsignada: responsable.dependencia, estado: "Reasignada", assignedAt: nowIso() }, `Reasignación de ${solicitud.dirigidaA} a ${responsable.nombre}`);
-      showToast(`${radicado} reasignada a ${responsable.nombre}.`);
-      return;
-    }
+async function createInstitutionalUser(event) {
+  event.preventDefault();
+  if (state.profile?.role !== "super_admin") return;
+  const fd = new FormData(event.currentTarget);
+  const nombre = clean(fd.get("nombre"), 90);
+  const correo = clean(fd.get("correo"), 120).toLowerCase();
+  const password = String(fd.get("password") || "");
+  const cargo = clean(fd.get("cargo"), 120);
+  const dependencia = clean(fd.get("dependencia"), 120);
+  const role = clean(fd.get("role"), 30);
+  const responsibleId = profileFromCargo(cargo, dependencia);
+  try {
+    const secondary = initializeApp(firebaseConfig, `secondary-${Date.now()}`);
+    const secondaryAuth = getAuth(secondary);
+    const credential = await createUserWithEmailAndPassword(secondaryAuth, correo, password);
+    await setDoc(doc(db, "users", credential.user.uid), { nombre, correo, cargo, dependencia, role, responsibleId, activo: fd.get("activo") === "true", createdAt: serverTimestamp(), createdBy: state.profile.uid });
+    await signOut(secondaryAuth).catch(() => {});
+    await deleteApp(secondary).catch(() => {});
+    event.currentTarget.reset();
+    toast("Usuario creado correctamente.");
+  } catch (error) {
+    toast(error.code === "auth/email-already-in-use" ? "Ese correo ya existe en Firebase Auth." : "No fue posible crear el usuario.", "error");
+  }
+}
 
-    if (action === "change-estado") {
-      const estado = row.querySelector(".estadoSelect").value;
-      updateSolicitud(radicado, { estado }, `Cambio de estado a ${estado}`);
-      showToast(`${radicado} quedó en estado ${estado}.`);
-      return;
-    }
+function exportCsv() {
+  const rows = state.solicitudes;
+  if (!rows.length) return toast("No hay registros para exportar.", "error");
+  const headers = ["radicado", "fecha", "nombreCiudadano", "correo", "celular", "barrioVereda", "zona", "tipoParticipante", "tipoSolicitud", "tema", "responsable", "estado", "respondidaEnVivo", "minutoLive", "mensaje", "respuestaOficial", "evidenciaUrl"];
+  const csv = [headers.join(";")].concat(rows.map(r => headers.map(h => `"${String(h === "fecha" ? formatDate(r.createdAt) : h === "responsable" ? responsableName(r.assignedTo) : r[h] ?? "").replaceAll('"', '""')}"`).join(";"))).join("\n");
+  const blob = new Blob(["\ufeff" + csv], { type: "text/csv;charset=utf-8" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "rendicion-cuentas-2026-solicitudes.csv";
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
 
-    if (action === "save-respuesta") {
-      const respuesta = row.querySelector(".respuestaInput").value.trim();
-      const evidenciaUrl = row.querySelector(".evidenciaInput").value.trim();
-      const minutoLive = row.querySelector(".minutoInput").value.trim();
-      const respondidaEnVivo = row.querySelector(".enVivoInput").checked;
-      const estado = respondidaEnVivo ? "Respondida en vivo" : "Respondida";
-      updateSolicitud(radicado, { respuestaOficial: respuesta, evidenciaUrl, minutoLive, respondidaEnVivo, estado, answeredAt: nowIso(), closedAt: nowIso() }, "Respuesta oficial registrada por responsable.");
-      showToast(`${radicado} quedó con respuesta oficial registrada.`);
-      return;
-    }
-
-    if (action === "mark-notificada") {
-      updateSolicitud(radicado, { notificacionEnviada: true, estado: "Notificada" }, "Marcación de notificación enviada al ciudadano.");
-      showToast(`Notificación marcada como enviada para ${radicado}.`);
-    }
+function bindEvents() {
+  $$(`[data-go]`).forEach(btn => btn.addEventListener("click", event => { event.preventDefault(); changeView(btn.dataset.go); }));
+  $("#menuBtn").addEventListener("click", () => $("#mainNav").classList.toggle("open"));
+  $("#publicForm").addEventListener("submit", submitPublicForm);
+  $("#lookupForm").addEventListener("submit", lookupResponse);
+  $("#loginForm").addEventListener("submit", login);
+  $("#logoutBtn").addEventListener("click", () => signOut(auth));
+  $("#liveForm").addEventListener("submit", saveLive);
+  $("#createUserForm").addEventListener("submit", createInstitutionalUser);
+  $("#answerForm").addEventListener("submit", saveAnswer);
+  $("#answerForm .close").addEventListener("click", () => $("#requestDialog").close());
+  $("#searchBox").addEventListener("input", renderRequests);
+  $("#statusFilter").addEventListener("change", renderRequests);
+  $("#exportBtn").addEventListener("click", exportCsv);
+  $("#cargoSelect").addEventListener("change", event => {
+    const found = responsablesBase.find(r => r.cargo === event.target.value);
+    if (found) $("#dependenciaSelect").value = found.dependencia;
   });
+}
 
-  render();
-})();
+fillSelects();
+bindEvents();
+loadPublicData();
+onAuthStateChanged(auth, handleAuth);

@@ -3,16 +3,313 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <meta name="theme-color" content="#0e7490" />
-  <meta name="description" content="Aplicativo de participación y trazabilidad para la Rendición de Cuentas 2026 de la Alcaldía Municipal de San Pedro Valle." />
+  <meta name="theme-color" content="#0b5d3f" />
+  <meta name="description" content="Sistema de participación y trazabilidad para la Rendición de Cuentas 2026 de la Alcaldía Municipal de San Pedro Valle." />
   <title>Rendición de Cuentas 2026 | San Pedro Valle</title>
   <link rel="icon" href="assets/logo.png" />
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <noscript>Este aplicativo necesita JavaScript para funcionar.</noscript>
-  <div id="root"></div>
-  <script src="https://cdn.jsdelivr.net/npm/hls.js@1"></script>
-  <script src="app.js"></script>
+  <noscript>Este aplicativo requiere JavaScript habilitado.</noscript>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <header class="topbar">
+    <a class="brand" href="#inicio" data-go="inicio" aria-label="Ir al inicio">
+      <img src="assets/logo.png" alt="Alcaldía Municipal de San Pedro Valle" />
+      <span>
+        <strong>Rendición de Cuentas 2026</strong>
+        <small>Alcaldía Municipal de San Pedro Valle del Cauca</small>
+      </span>
+    </a>
+    <button id="menuBtn" class="menu-btn" type="button" aria-label="Abrir menú">☰</button>
+    <nav id="mainNav" class="main-nav">
+      <button data-go="inicio" type="button">Inicio</button>
+      <button data-go="participar" type="button">Registrar pregunta</button>
+      <button data-go="consultar" type="button">Consultar respuesta</button>
+      <button data-go="respondidas" type="button">Respondidas en vivo</button>
+      <button data-go="panel" type="button">Panel interno</button>
+    </nav>
+  </header>
+
+  <main>
+    <section id="inicio" class="view active">
+      <div class="hero">
+        <div class="hero-copy">
+          <p class="eyebrow">Participación ciudadana y trazabilidad institucional</p>
+          <h1>Rendición de Cuentas 2026</h1>
+          <p>Realiza tus preguntas, inquietudes, peticiones o propuestas durante la transmisión y consulta la respuesta oficial con el radicado entregado por el sistema.</p>
+          <div class="hero-actions">
+            <button class="primary" data-go="participar" type="button">Registrar pregunta</button>
+            <button class="secondary" data-go="consultar" type="button">Consultar respuesta</button>
+          </div>
+        </div>
+        <div class="event-card">
+          <span class="pulse"></span>
+          <div>
+            <strong id="eventStatus">Rendición de Cuentas 2026</strong>
+            <small id="eventDate">Transmisión oficial</small>
+          </div>
+        </div>
+      </div>
+
+      <section class="panel video-panel">
+        <div class="section-title">
+          <div>
+            <p class="eyebrow">Transmisión oficial</p>
+            <h2 id="liveTitle">Live institucional</h2>
+          </div>
+          <a id="openLive" class="text-link" target="_blank" rel="noopener noreferrer">Abrir enlace original</a>
+        </div>
+        <div id="videoMount" class="video-shell"></div>
+      </section>
+    </section>
+
+    <section id="participar" class="view">
+      <div class="panel narrow">
+        <p class="eyebrow">Formulario ciudadano</p>
+        <h2>Registrar participación</h2>
+        <form id="publicForm" class="form-grid">
+          <label>Nombre completo
+            <input name="nombreCiudadano" maxlength="90" autocomplete="name" required />
+          </label>
+          <label>Correo electrónico
+            <input name="correo" type="email" maxlength="120" autocomplete="email" />
+          </label>
+          <label>Celular
+            <input name="celular" maxlength="20" inputmode="tel" autocomplete="tel" />
+          </label>
+          <label>Barrio o vereda
+            <input name="barrioVereda" maxlength="90" required />
+          </label>
+          <label>Zona
+            <select name="zona" required>
+              <option value="">Seleccionar</option>
+              <option>Urbana</option>
+              <option>Rural</option>
+            </select>
+          </label>
+          <label>Tipo de participante
+            <select name="tipoParticipante" required>
+              <option value="">Seleccionar</option>
+              <option>Ciudadano</option>
+              <option>Líder comunitario</option>
+              <option>Veeduría ciudadana</option>
+              <option>Comerciante</option>
+              <option>Joven</option>
+              <option>Adulto mayor</option>
+              <option>Servidor público</option>
+              <option>Otro</option>
+            </select>
+          </label>
+          <label>Tipo de solicitud
+            <select name="tipoSolicitud" required>
+              <option value="">Seleccionar</option>
+              <option>Pregunta</option>
+              <option>Duda</option>
+              <option>Inquietud</option>
+              <option>Petición</option>
+              <option>Propuesta</option>
+              <option>Comentario</option>
+              <option>Solicitud de información</option>
+            </select>
+          </label>
+          <label>Tema
+            <select name="tema" required>
+              <option value="">Seleccionar</option>
+              <option>Alcaldía municipal</option>
+              <option>Hacienda</option>
+              <option>Salud</option>
+              <option>Gobierno</option>
+              <option>Desarrollo</option>
+              <option>Agricultura</option>
+              <option>Educación, cultura y deporte</option>
+              <option>Bienestar social</option>
+              <option>Gestión social</option>
+              <option>TICs</option>
+              <option>Obras públicas</option>
+              <option>Seguridad</option>
+              <option>Ambiente</option>
+              <option>Otro</option>
+            </select>
+          </label>
+          <label class="full">Dirigida a
+            <select id="publicAssignedTo" name="assignedTo" required></select>
+          </label>
+          <label class="full">Mensaje
+            <textarea name="mensaje" rows="6" maxlength="1800" required placeholder="Escribe aquí tu pregunta o solicitud"></textarea>
+          </label>
+          <label class="check full">
+            <input type="checkbox" name="autorizacion" required />
+            <span>Autorizo el tratamiento de mis datos personales para gestionar mi participación, responder mi solicitud y generar trazabilidad institucional de la Rendición de Cuentas 2026.</span>
+          </label>
+          <button class="primary full" type="submit">Enviar y generar radicado</button>
+        </form>
+        <div id="radicadoBox" class="result hidden"></div>
+      </div>
+    </section>
+
+    <section id="consultar" class="view">
+      <div class="panel narrow">
+        <p class="eyebrow">Consulta ciudadana</p>
+        <h2>Consultar respuesta</h2>
+        <form id="lookupForm" class="lookup-form">
+          <input name="radicado" placeholder="Radicado" maxlength="20" required />
+          <input name="token" placeholder="Código de consulta" maxlength="20" required />
+          <button class="primary" type="submit">Consultar</button>
+        </form>
+        <div id="lookupResult" class="result hidden"></div>
+      </div>
+    </section>
+
+    <section id="respondidas" class="view">
+      <div class="panel">
+        <div class="section-title">
+          <div>
+            <p class="eyebrow">Respuestas durante la transmisión</p>
+            <h2>Preguntas respondidas en vivo</h2>
+          </div>
+        </div>
+        <div id="liveAnsweredList" class="cards-grid"></div>
+      </div>
+    </section>
+
+    <section id="panel" class="view">
+      <div id="loginPanel" class="panel narrow">
+        <p class="eyebrow">Acceso institucional</p>
+        <h2>Panel interno</h2>
+        <form id="loginForm" class="form-grid">
+          <label class="full">Correo electrónico
+            <input name="email" type="email" autocomplete="email" required />
+          </label>
+          <label class="full">Contraseña
+            <input name="password" type="password" autocomplete="current-password" required />
+          </label>
+          <button class="primary full" type="submit">Ingresar</button>
+        </form>
+      </div>
+
+      <div id="privatePanel" class="hidden">
+        <div class="panel dashboard-head">
+          <div>
+            <p class="eyebrow">Panel institucional</p>
+            <h2 id="userWelcome">Solicitudes asignadas</h2>
+            <p id="userRoleLine"></p>
+          </div>
+          <button id="logoutBtn" class="secondary" type="button">Cerrar sesión</button>
+        </div>
+
+        <div id="superTools" class="admin-tools hidden">
+          <section class="panel">
+            <div class="section-title">
+              <div>
+                <p class="eyebrow">Transmisión</p>
+                <h3>Actualizar live o video</h3>
+              </div>
+            </div>
+            <form id="liveForm" class="form-grid">
+              <label class="full">Título
+                <input name="title" maxlength="100" />
+              </label>
+              <label class="full">Iframe o enlace
+                <textarea name="embed" rows="5" placeholder="Pega el iframe de Facebook, YouTube o el enlace del video"></textarea>
+              </label>
+              <button class="primary full" type="submit">Guardar transmisión</button>
+            </form>
+          </section>
+
+          <section class="panel">
+            <div class="section-title">
+              <div>
+                <p class="eyebrow">Usuarios</p>
+                <h3>Crear usuario institucional</h3>
+              </div>
+            </div>
+            <form id="createUserForm" class="form-grid">
+              <label class="full">Nombre completo
+                <input name="nombre" maxlength="90" required />
+              </label>
+              <label>Correo electrónico
+                <input name="correo" type="email" maxlength="120" required />
+              </label>
+              <label>Contraseña temporal
+                <input name="password" type="password" minlength="8" required />
+              </label>
+              <label>Cargo
+                <select id="cargoSelect" name="cargo" required></select>
+              </label>
+              <label>Dependencia
+                <select id="dependenciaSelect" name="dependencia" required></select>
+              </label>
+              <label>Rol
+                <select name="role" required>
+                  <option value="responsable">Responsable</option>
+                  <option value="super_admin">Super Admin</option>
+                </select>
+              </label>
+              <label>Estado
+                <select name="activo" required>
+                  <option value="true">Activo</option>
+                  <option value="false">Inactivo</option>
+                </select>
+              </label>
+              <button class="primary full" type="submit">Crear usuario</button>
+            </form>
+          </section>
+        </div>
+
+        <section class="panel">
+          <div class="filters">
+            <input id="searchBox" placeholder="Buscar por radicado, tema, estado o mensaje" />
+            <select id="statusFilter">
+              <option value="">Todos los estados</option>
+              <option value="recibida">Recibida</option>
+              <option value="asignada">Asignada</option>
+              <option value="respondida_en_vivo">Respondida en vivo</option>
+              <option value="respondida">Respondida</option>
+              <option value="cerrada">Cerrada</option>
+            </select>
+            <button id="exportBtn" class="secondary" type="button">Exportar CSV</button>
+          </div>
+          <div id="requestsList" class="request-list"></div>
+        </section>
+      </div>
+    </section>
+  </main>
+
+  <dialog id="requestDialog">
+    <form method="dialog" id="answerForm" class="dialog-card">
+      <button class="close" value="cancel" type="button" aria-label="Cerrar">×</button>
+      <p id="dialogRadicado" class="eyebrow"></p>
+      <h3 id="dialogTitle"></h3>
+      <div id="dialogMeta" class="meta-list"></div>
+      <label id="reassignField">Reasignar responsable
+        <select id="dialogAssignedTo" name="assignedTo"></select>
+      </label>
+      <label>Estado
+        <select name="estado" required>
+          <option value="recibida">Recibida</option>
+          <option value="asignada">Asignada</option>
+          <option value="respondida_en_vivo">Respondida en vivo</option>
+          <option value="respondida">Respondida</option>
+          <option value="cerrada">Cerrada</option>
+        </select>
+      </label>
+      <label class="check">
+        <input name="respondidaEnVivo" type="checkbox" />
+        <span>Respondida durante la transmisión</span>
+      </label>
+      <label>Minuto del live
+        <input name="minutoLive" placeholder="01:18:40" maxlength="12" />
+      </label>
+      <label>Hipervínculo o evidencia
+        <input name="evidenciaUrl" placeholder="https://..." maxlength="300" />
+      </label>
+      <label>Respuesta oficial
+        <textarea name="respuestaOficial" rows="7" maxlength="2800" required></textarea>
+      </label>
+      <button class="primary" type="submit">Guardar respuesta</button>
+    </form>
+  </dialog>
+
+  <script type="module" src="app.js"></script>
 </body>
 </html>
